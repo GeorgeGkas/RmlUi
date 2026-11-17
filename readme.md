@@ -1,6 +1,6 @@
 ﻿# RmlUi with a C API (fork)
 
-This repository is a fork of [RmlUi](https://github.com/mikke89/RmlUi) that adds a C API, so that RmlUi can be used from languages that can call C but not C++. The first target is the [Odin](https://odin-lang.org) programming language, but nothing in the API is specific to Odin. The original RmlUi README continues [further down](#rmlui---the-htmlcss-user-interface-library-evolved).
+This repository is a fork of [RmlUi](https://github.com/mikke89/RmlUi) that adds a C API, so that RmlUi can be used from languages that can call C but not C++. The first target is the [Odin](https://odin-lang.org) programming language (available in [RmlUi-odin](https://github.com/GeorgeGkas/RmlUi-odin) repo), but nothing in the API is specific to Odin. The original RmlUi README continues [further down](#rmlui---the-htmlcss-user-interface-library-evolved).
 
 ## Why this fork exists
 
