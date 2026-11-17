@@ -1,4 +1,127 @@
-﻿# RmlUi - The HTML/CSS User Interface Library Evolved
+﻿# RmlUi with a C API (fork)
+
+This repository is a fork of [RmlUi](https://github.com/mikke89/RmlUi) that adds a C API, so that RmlUi can be used from languages that can call C but not C++. The first target is the [Odin](https://odin-lang.org) programming language, but nothing in the API is specific to Odin. The original RmlUi README continues [further down](#rmlui---the-htmlcss-user-interface-library-evolved).
+
+## Why this fork exists
+
+RmlUi is a C++ library. Its API is made of classes, virtual functions, templates and C++ ownership rules, and none of that can be called from another language without a C++ compiler on the other side. Most languages with a foreign function interface, such as Odin, Zig, Rust, Go, C#, Python or plain C, can only call functions that use the C ABI.
+
+The C API wraps RmlUi's C++ API in plain C99 functions and structs:
+
+- Contexts, elements, documents, events and other objects are opaque handles such as `RmlContext*` and `RmlElement*`.
+- Strings are passed in as `RmlStringView` (a pointer and a length, borrowed for the call) and returned as `RmlOwnedString` (heap memory that you free with `rml_owned_string_free`).
+- Everything that C++ users implement by subclassing is implemented by filling in a struct of callbacks, each of which receives a `void* user_data`. This covers the system, render and file interfaces, font engines, text input handlers, custom elements, decorators, filters, font effects, event listeners, instancers, plugins and data model types.
+
+The headers are written to be fed to binding generators. For example, [odin-c-bindgen](https://github.com/karl-zylinski/odin-c-bindgen) generates an Odin package for every exported function without manual edits.
+
+## What the fork adds
+
+- **The C API library, `rmlui_capi`.** The headers are in [`Include/RmlUi/CApi/`](Include/RmlUi/CApi), with the umbrella header [`Include/RmlUi/CApi.h`](Include/RmlUi/CApi.h), and the implementation is in [`Source/CApi/`](Source/CApi). It currently exports 468 functions, covering contexts, the element tree and form controls, events, data models and data bindings, style sheets, variants, the debugger, all of the interfaces listed above, and drawing geometry with textures and shaders from custom elements and decorators.
+- **An optional backend wrapper, `rmlui_capi_backend`.** [`Backend.h`](Include/RmlUi/CApi/Backend.h) exposes the window, input and rendering backend from RmlUi's samples, for getting started without writing a renderer.
+- **A test suite** in [`Tests/Source/CApi/`](Tests/Source/CApi). It uses the C API only through C callbacks, as a binding would, and also checks that every header compiles as strict C99.
+- **Two fixes to the core library**, found while testing the C API:
+  - Loading a style sheet from a file that doesn't exist returns null, instead of parsing a stream that never opened.
+  - The debugger no longer crashes on shutdown after it has been switched from one context to another.
+
+Apart from those two fixes, the core library is the same as upstream.
+
+## Building
+
+The C API is off by default. These CMake options control it:
+
+| Option | Effect |
+|---|---|
+| `RMLUI_CAPI=ON` | Builds `rmlui_capi`. |
+| `RMLUI_CAPI_BACKEND=ON` | Also builds `rmlui_capi_backend` for the backend selected by `RMLUI_BACKEND`. Requires `RMLUI_CAPI`. |
+| `BUILD_SHARED_LIBS=ON` | Recommended when using RmlUi from another language, so that you link one shared library instead of the static C++ libraries and the C++ runtime. |
+| `BUILD_TESTING=ON` | Also builds the C API tests, `rmlui_capi_tests`, when `RMLUI_CAPI` is on. As with the upstream tests, this needs the dependencies of the selected `RMLUI_BACKEND`. |
+
+```sh
+cmake -B build -DRMLUI_CAPI=ON -DBUILD_SHARED_LIBS=ON
+cmake --build build
+```
+
+A minimal program using the backend wrapper looks like this, with error handling left out. Run it from the repository root so that the sample assets are found.
+
+```c
+#include <RmlUi/CApi.h>
+#include <RmlUi/CApi/Backend.h>
+
+int main(void)
+{
+	if (!rml_backend_initialize(rml_sv("Hello RmlUi"), 1024, 768, true))
+		return 1;
+	rml_set_system_interface(rml_backend_get_system_interface());
+	rml_set_render_interface(rml_backend_get_render_interface());
+	rml_initialise();
+
+	RmlContext* ctx = rml_create_context(rml_sv("main"), (RmlVector2i){1024, 768}, NULL, NULL);
+	rml_load_font_face(rml_sv("Samples/assets/LatoLatin-Regular.ttf"), false, RML_FONT_WEIGHT_AUTO, 0);
+	RmlElementDocument* document = rml_context_load_document(ctx, rml_sv("Samples/assets/demo.rml"));
+	rml_document_show(document, RML_MODAL_FLAG_NONE, RML_FOCUS_FLAG_AUTO, RML_SCROLL_FLAG_AUTO);
+
+	while (rml_backend_process_events(ctx, NULL, NULL, false))
+	{
+		rml_context_update(ctx);
+		rml_backend_begin_frame();
+		rml_context_render(ctx);
+		rml_backend_present_frame();
+	}
+
+	rml_shutdown();
+	rml_backend_shutdown();
+	return 0;
+}
+```
+
+## API conventions
+
+The header comments document ownership and lifetimes for each function. The general rules are:
+
+- Functions are named `rml_<object>_<action>`, types `Rml<Name>`, and constants `RML_<NAME>`.
+- `RmlStringView` arguments are borrowed for the duration of the call and don't need to be null-terminated. `RmlOwnedString` results belong to you and must be freed with `rml_owned_string_free`.
+- Callback structs are copied when the object is created, and `user_data` is passed back to every callback unchanged. Objects that you register with RmlUi, such as interfaces, instancers and plugins, must stay alive until after `rml_shutdown`.
+- Elements belong to RmlUi once they are part of a document. An element that you have created but not inserted is *caller-owned*: either insert it or destroy it with `rml_element_release`. See [`Element.h`](Include/RmlUi/CApi/Element.h).
+- If you pass a null or otherwise invalid argument, the function logs an error through the system interface and returns a zero value. This also happens in release builds, so mistakes in bindings show up in the log instead of crashing.
+
+## Limitations
+
+- **The C API wraps C++; it doesn't replace it.** It calls into the C++ core library, so a program that uses it still links RmlUi and needs a C++ runtime. Linking the shared library keeps that out of your language's build.
+- **There is no stable ABI yet.** Functions and struct layouts can still change from one commit of this fork to the next. Pin a commit, and regenerate your bindings whenever you update.
+- **It is single-threaded, like RmlUi.** Call the API from one thread. Callbacks run on that thread, during the API call that triggers them.
+- **Lifetimes are manual.** The API can't detect dangling handles or use after free. For example, a data model handle used after its model has been removed isn't detected, and geometry, compiled shaders and texture sources must be destroyed before the render manager they belong to is released (see [`Render.h`](Include/RmlUi/CApi/Render.h)).
+- **Some features are not wrapped:**
+  - The Lua plugin. Its entry point, `Rml::Lua::Initialise`, is a C++ function, so another language can't start the plugin without a small C wrapper, which this fork doesn't provide yet.
+  - Rendering into a texture. C++ code can bake effects into textures using the render manager's layers, scissor region and render state, but none of these are exposed. Custom elements and decorators can still draw geometry with textures and shaders through `Render.h`.
+  - Custom XML node handlers.
+  - Creating variant lists. Variant lists are only received, as event and transform arguments.
+- **SVG and Lottie need no extra API.** When RmlUi is built with `RMLUI_SVG_PLUGIN` or `RMLUI_LOTTIE_PLUGIN`, `rml_initialise` starts the plugins, and you use them from RML and RCSS, with `<svg>`, `decorator: svg(...)` and `<lottie>`. This should work through the C API, but the C API tests don't cover it.
+- **Bindings need to handle a few details:**
+  - `rml_sv` is a `static inline` helper in [`Types.h`](Include/RmlUi/CApi/Types.h), so it has no symbol in the library. Bindings need their own equivalent.
+  - The memory layout of `RmlMatrix4f` depends on the `RMLUI_MATRIX_ROW_MAJOR` build option. Check it at runtime with `rml_matrix_is_row_major()`.
+  - `rml_variant_set_vector2i` stores a float vector, because RmlUi has no integer vector variant, so components larger than 2^24 lose precision.
+  - `rml_element_has_property` returns true for every registered property, as in C++. Use `rml_element_has_local_property` to check whether the element itself sets the property.
+- **Testing is limited so far.** The C API tests have been run on macOS (Apple Clang, arm64), including under AddressSanitizer, UndefinedBehaviorSanitizer and the macOS `leaks` tool. They don't run in CI yet, and Windows and Linux builds haven't been tested. The backend wrapper only has a test that checks its name. Odin bindings have been generated with odin-c-bindgen for every header except `Backend.h`, but haven't yet been compiled and run against the library.
+
+## Use of AI
+
+This fork was developed with extensive use of AI coding agents. The agents wrote the C API, its tests and its documentation. An agent also reviewed the finished C API for correctness and for coverage of the C++ API. That review found 28 issues, 2 in the core library and 26 in the C API, and all of them have been fixed and covered by regression tests.
+
+Keep the following in mind when you use this fork:
+
+- Every function exported by `rmlui_capi` is called by at least one test. However, tests only catch what they check for, and AI-written code can be wrong in ways that look plausible.
+- None of this work has been reviewed by the RmlUi maintainers.
+- Treat the C API as experimental. Rely on the header comments for the exact behaviour of each function, rather than assuming it matches the C++ API.
+
+## Relationship with upstream
+
+This fork follows [mikke89/RmlUi](https://github.com/mikke89/RmlUi). The C API currently sits on top of upstream commit `c29f20d7`. It is not part of upstream RmlUi, so please report problems with the C API on [this fork](https://github.com/GeorgeGkas/RmlUi/issues) rather than upstream. Problems in RmlUi itself that also happen with upstream belong in the [upstream issue tracker](https://github.com/mikke89/RmlUi/issues).
+
+The fork keeps RmlUi's MIT license; see [`LICENSE.txt`](LICENSE.txt).
+
+---
+
+# RmlUi - The HTML/CSS User Interface Library Evolved
 
 ![RmlUi logo](https://github.com/mikke89/RmlUiDoc/raw/c7253748d1bcf6dd33d97ab4fe8b6731a7ee3dac/assets/rmlui.png)
 
