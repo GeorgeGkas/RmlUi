@@ -14,6 +14,7 @@
 #include "FontSource.h"
 #include "Geometry.h"
 #include "MenuSource.h"
+#include <algorithm>
 #include <stack>
 
 namespace Rml {
@@ -74,6 +75,8 @@ bool DebuggerPlugin::SetContext(Context* context)
 	{
 		debug_context->UnloadDocument(hook_element);
 		hook_element = nullptr;
+		if (std::find(contexts_with_unloaded_hook.begin(), contexts_with_unloaded_hook.end(), debug_context) == contexts_with_unloaded_hook.end())
+			contexts_with_unloaded_hook.push_back(debug_context);
 	}
 
 	if (context)
@@ -170,6 +173,11 @@ void DebuggerPlugin::OnShutdown()
 	// and that we don't try send the messages to the debug log window
 	ReleaseElements();
 
+	// Release hook documents still pending in previously debugged contexts while their instancer is alive.
+	for (Context* context : contexts_with_unloaded_hook)
+		context->Update();
+	contexts_with_unloaded_hook.clear();
+
 	hook_element_instancer.reset();
 
 	delete this;
@@ -192,6 +200,10 @@ void DebuggerPlugin::OnContextDestroy(Context* context)
 		Geometry::SetContext(nullptr);
 		host_context = nullptr;
 	}
+
+	// The context releases its unloaded documents itself as it is destroyed.
+	contexts_with_unloaded_hook.erase(std::remove(contexts_with_unloaded_hook.begin(), contexts_with_unloaded_hook.end(), context),
+		contexts_with_unloaded_hook.end());
 }
 
 void DebuggerPlugin::OnElementDestroy(Element* element)

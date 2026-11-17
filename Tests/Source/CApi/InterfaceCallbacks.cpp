@@ -709,12 +709,57 @@ TEST_CASE("capi.interfaces.debugger_can_switch_context")
 	CHECK(rml_context_update(other));
 
 	CHECK(rml_debugger_set_context(session.ctx));
-	// The previous debug context must update to release the debugger's hook document before the debugger shuts down.
-	CHECK(rml_context_update(other));
 	rml_debugger_set_visible(false);
 	session.Update();
 	CHECK_FALSE(rml_debugger_is_visible());
 	rml_debugger_shutdown();
 
 	CHECK(rml_remove_context(rml_sv("debug_secondary")));
+}
+
+TEST_CASE("capi.interfaces.debugger_shutdown_releases_hooks_left_in_previous_contexts")
+{
+	Session session("debug_hooks");
+	RmlContext* second = rml_create_context(rml_sv("debug_hooks_second"), RmlVector2i{300, 300}, nullptr, nullptr);
+	RmlContext* third = rml_create_context(rml_sv("debug_hooks_third"), RmlVector2i{300, 300}, nullptr, nullptr);
+	REQUIRE(second);
+	REQUIRE(third);
+
+	// Each switch unloads the hook document from the previous context, which only releases it on its next update.
+	REQUIRE(rml_debugger_initialise(session.ctx));
+	CHECK(rml_debugger_set_context(second));
+	CHECK(rml_debugger_set_context(third));
+	CHECK(rml_debugger_set_context(session.ctx));
+
+	CHECK(rml_remove_context(rml_sv("debug_hooks_third")));
+	rml_debugger_shutdown();
+
+	CHECK(rml_context_update(second));
+	CHECK(rml_remove_context(rml_sv("debug_hooks_second")));
+}
+
+TEST_CASE("capi.interfaces.style_sheet_from_missing_file_returns_null")
+{
+	SUBCASE("custom file interface")
+	{
+		MemoryFileSystem fs;
+		RmlFileInterface* file_interface = MakeFileInterface(&fs);
+		SessionOptions options;
+		options.file_interface = file_interface;
+		options.load_default_font = false;
+		{
+			Session session("missing_sheet_custom", options);
+			CHECK(rml_style_sheet_container_create_from_file(rml_sv("missing.rcss")) == nullptr);
+			CHECK(fs.Opens("missing.rcss") == 1);
+			// No read, seek, tell, or close on a handle that open never returned.
+			CHECK(fs.invalid_handle_calls == 0);
+		}
+		rml_file_interface_destroy(file_interface);
+	}
+
+	SUBCASE("default file interface")
+	{
+		Session session("missing_sheet_default");
+		CHECK(rml_style_sheet_container_create_from_file(rml_sv("does/not/exist.rcss")) == nullptr);
+	}
 }

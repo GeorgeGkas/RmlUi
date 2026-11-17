@@ -80,6 +80,8 @@ private:
 	Context* host_context;
 	// The context we're debugging.
 	Context* debug_context;
+	// Previously debugged contexts that may still hold an unloaded hook document, released only on their next update.
+	Vector<Context*> contexts_with_unloaded_hook;
 
 	// The debug elements.
 	ElementDocument* menu_element;

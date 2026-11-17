@@ -139,24 +139,6 @@ TEST_CASE("capi.known_issues.plugin_shutdown_is_delivered_after_reinitialise" * 
 	rml_plugin_destroy(plugin);
 }
 
-TEST_CASE("capi.known_issues.style_sheet_from_missing_file_returns_null" * doctest::should_fail())
-{
-	MemoryFileSystem fs;
-	RmlFileInterface* file_interface = MakeFileInterface(&fs);
-	SessionOptions options;
-	options.file_interface = file_interface;
-	options.load_default_font = false;
-	{
-		Session session("known_missing_sheet", options);
-		RmlStyleSheetContainer* container = rml_style_sheet_container_create_from_file(rml_sv("missing.rcss"));
-		CHECK(container == nullptr);
-		rml_style_sheet_container_destroy(container);
-		// Closing, reading, or seeking a handle that open never returned.
-		CHECK(fs.invalid_handle_calls == 0);
-	}
-	rml_file_interface_destroy(file_interface);
-}
-
 TEST_CASE("capi.known_issues.array_types_defined_in_c_expose_size" * doctest::should_fail())
 {
 	Session session("known_array_size");
