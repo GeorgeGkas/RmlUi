@@ -12,3 +12,7 @@ add_subdirectory("Debugger")
 if(RMLUI_LUA_BINDINGS)
 	add_subdirectory("Lua")
 endif()
+
+if(RMLUI_CAPI)
+	add_subdirectory("CApi")
+endif()
