@@ -49,28 +49,28 @@ A minimal program using the backend wrapper looks like this, with error handling
 
 int main(void)
 {
-	if (!rml_backend_initialize(rml_sv("Hello RmlUi"), 1024, 768, true))
-		return 1;
-	rml_set_system_interface(rml_backend_get_system_interface());
-	rml_set_render_interface(rml_backend_get_render_interface());
-	rml_initialise();
+    if (!rml_backend_initialize(rml_sv("Hello RmlUi"), 1024, 768, true))
+        return 1;
+    rml_set_system_interface(rml_backend_get_system_interface());
+    rml_set_render_interface(rml_backend_get_render_interface());
+    rml_initialise();
 
-	RmlContext* ctx = rml_create_context(rml_sv("main"), (RmlVector2i){1024, 768}, NULL, NULL);
-	rml_load_font_face(rml_sv("Samples/assets/LatoLatin-Regular.ttf"), false, RML_FONT_WEIGHT_AUTO, 0);
-	RmlElementDocument* document = rml_context_load_document(ctx, rml_sv("Samples/assets/demo.rml"));
-	rml_document_show(document, RML_MODAL_FLAG_NONE, RML_FOCUS_FLAG_AUTO, RML_SCROLL_FLAG_AUTO);
+    RmlContext* ctx = rml_create_context(rml_sv("main"), (RmlVector2i){1024, 768}, NULL, NULL);
+    rml_load_font_face(rml_sv("Samples/assets/LatoLatin-Regular.ttf"), false, RML_FONT_WEIGHT_AUTO, 0);
+    RmlElementDocument* document = rml_context_load_document(ctx, rml_sv("Samples/assets/demo.rml"));
+    rml_document_show(document, RML_MODAL_FLAG_NONE, RML_FOCUS_FLAG_AUTO, RML_SCROLL_FLAG_AUTO);
 
-	while (rml_backend_process_events(ctx, NULL, NULL, false))
-	{
-		rml_context_update(ctx);
-		rml_backend_begin_frame();
-		rml_context_render(ctx);
-		rml_backend_present_frame();
-	}
+    while (rml_backend_process_events(ctx, NULL, NULL, false))
+    {
+        rml_context_update(ctx);
+        rml_backend_begin_frame();
+        rml_context_render(ctx);
+        rml_backend_present_frame();
+    }
 
-	rml_shutdown();
-	rml_backend_shutdown();
-	return 0;
+    rml_shutdown();
+    rml_backend_shutdown();
+    return 0;
 }
 ```
 
