@@ -2,11 +2,21 @@ set(TARGET_NAME "rmlui_capi_tests")
 
 add_executable(${TARGET_NAME}
 	main.cpp
+	Harness.h
+	Harness.cpp
 	Foundation.cpp
 	DomEvents.cpp
 	DataModel.cpp
+	DataBinding.cpp
 	Extensions.cpp
+	Extensibility.cpp
 	ReviewFixes.cpp
+	ContextApi.cpp
+	ElementApi.cpp
+	FormControls.cpp
+	ValueTypes.cpp
+	InterfaceCallbacks.cpp
+	KnownIssues.cpp
 )
 
 # Pure C compilation check: CApi headers must be valid C99.
