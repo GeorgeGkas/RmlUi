@@ -292,3 +292,184 @@ TEST_CASE("capi.values.version_matrix_layout_and_logging")
 		CHECK(session.system_log.messages[before + i].second == "capi log probe");
 	}
 }
+
+TEST_CASE("capi.values.byte_char_and_pointer_round_trips")
+{
+	RmlVariant* variant = rml_variant_create();
+
+	unsigned char byte = 0;
+	rml_variant_set_byte(variant, 200);
+	CHECK(rml_variant_get_type(variant) == RML_VARIANT_TYPE_BYTE);
+	CHECK(rml_variant_get_byte(variant, &byte));
+	CHECK(byte == 200);
+	int i = 0;
+	CHECK(rml_variant_get_int(variant, &i));
+	CHECK(i == 200);
+
+	char c = 0;
+	rml_variant_set_char(variant, 'q');
+	CHECK(rml_variant_get_type(variant) == RML_VARIANT_TYPE_CHAR);
+	CHECK(rml_variant_get_char(variant, &c));
+	CHECK(c == 'q');
+	CHECK_FALSE(rml_variant_get_byte(variant, &byte));
+
+	int target = 0;
+	void* pointer = nullptr;
+	rml_variant_set_voidptr(variant, &target);
+	CHECK(rml_variant_get_type(variant) == RML_VARIANT_TYPE_VOIDPTR);
+	CHECK(rml_variant_get_voidptr(variant, &pointer));
+	CHECK(pointer == &target);
+	CHECK_FALSE(rml_variant_get_char(variant, &c));
+
+	rml_variant_set_int(variant, 5);
+	CHECK(rml_variant_get_byte(variant, &byte));
+	CHECK(byte == 5);
+	CHECK_FALSE(rml_variant_get_char(variant, &c));
+	CHECK_FALSE(rml_variant_get_voidptr(variant, &pointer));
+	CHECK(pointer == &target);
+
+	rml_variant_destroy(variant);
+}
+
+TEST_CASE("capi.values.variant_getters_reject_unconvertible_values_without_logging")
+{
+	Session session("values_getters");
+	const size_t before = session.system_log.messages.size();
+
+	struct Source {
+		void (*set)(RmlVariant*);
+		bool numeric;
+	};
+	const Source sources[] = {
+		{[](RmlVariant*) {}, false},
+		{[](RmlVariant* v) { rml_variant_set_bool(v, true); }, true},
+		{[](RmlVariant* v) { rml_variant_set_byte(v, 7); }, true},
+		{[](RmlVariant* v) { rml_variant_set_char(v, 'x'); }, false},
+		{[](RmlVariant* v) { rml_variant_set_int(v, -3); }, true},
+		{[](RmlVariant* v) { rml_variant_set_int64(v, 1 << 20); }, true},
+		{[](RmlVariant* v) { rml_variant_set_uint(v, 3); }, true},
+		{[](RmlVariant* v) { rml_variant_set_uint64(v, 9); }, true},
+		{[](RmlVariant* v) { rml_variant_set_float(v, 1.5f); }, true},
+		{[](RmlVariant* v) { rml_variant_set_double(v, 2.5); }, true},
+		{[](RmlVariant* v) { rml_variant_set_string(v, rml_sv("not a number")); }, false},
+		{[](RmlVariant* v) { rml_variant_set_voidptr(v, v); }, false},
+		{[](RmlVariant* v) { rml_variant_set_vector2f(v, RmlVector2f{1, 2}); }, false},
+		{[](RmlVariant* v) { rml_variant_set_vector3f(v, RmlVector3f{1, 2, 3}); }, false},
+		{[](RmlVariant* v) { rml_variant_set_vector4f(v, RmlVector4f{1, 2, 3, 4}); }, false},
+		{[](RmlVariant* v) { rml_variant_set_colourb(v, RmlColourb{1, 2, 3, 4}); }, false},
+		{[](RmlVariant* v) { rml_variant_set_colourf(v, RmlColourf{0.1f, 0.2f, 0.3f, 0.4f}); }, false},
+	};
+
+	for (const Source& source : sources)
+	{
+		RmlVariant* variant = rml_variant_create();
+		source.set(variant);
+		bool b;
+		int i;
+		int64_t i64;
+		unsigned int u;
+		uint64_t u64;
+		float f;
+		double d;
+		unsigned char byte;
+		char c;
+		void* p;
+		RmlVector2f v2;
+		RmlVector2i v2i;
+		RmlVector3f v3;
+		RmlVector4f v4;
+		RmlColourb cb;
+		RmlColourf cf;
+		const int numeric_successes = rml_variant_get_bool(variant, &b) + rml_variant_get_int(variant, &i) + rml_variant_get_int64(variant, &i64) +
+			rml_variant_get_uint(variant, &u) + rml_variant_get_uint64(variant, &u64) + rml_variant_get_float(variant, &f) +
+			rml_variant_get_double(variant, &d) + rml_variant_get_byte(variant, &byte);
+		if (source.numeric)
+			CHECK(numeric_successes == 8);
+		else if (rml_variant_get_type(variant) != RML_VARIANT_TYPE_STRING)
+			CHECK(numeric_successes == 0);
+		rml_variant_get_char(variant, &c);
+		rml_variant_get_voidptr(variant, &p);
+		rml_variant_get_vector2f(variant, &v2);
+		rml_variant_get_vector2i(variant, &v2i);
+		rml_variant_get_vector3f(variant, &v3);
+		rml_variant_get_vector4f(variant, &v4);
+		rml_variant_get_colourb(variant, &cb);
+		rml_variant_get_colourf(variant, &cf);
+		RmlOwnedString text = {};
+		rml_variant_to_string(variant, &text);
+		rml_owned_string_free(text);
+		rml_variant_destroy(variant);
+	}
+
+	for (size_t m = before; m < session.system_log.messages.size(); m++)
+	{
+		INFO(session.system_log.messages[m].second);
+		CHECK(session.system_log.messages[m].first != RML_LOG_TYPE_ERROR);
+		CHECK(session.system_log.messages[m].first != RML_LOG_TYPE_ASSERT);
+	}
+}
+
+TEST_CASE("capi.values.variant_to_string_and_compound_parsing")
+{
+	RmlVariant* variant = rml_variant_create();
+	RmlOwnedString text = {};
+
+	CHECK_FALSE(rml_variant_to_string(variant, &text));
+	rml_variant_set_float(variant, 1.5f);
+	CHECK(rml_variant_to_string(variant, &text));
+	CHECK(ToString(RmlStringView{text.data, text.size}) == "1.5");
+	rml_variant_set_bool(variant, true);
+	CHECK(rml_variant_to_string(variant, &text));
+	CHECK(ToString(RmlStringView{text.data, text.size}) == "1");
+	rml_variant_set_vector2f(variant, RmlVector2f{10, 20});
+	CHECK(rml_variant_to_string(variant, &text));
+	CHECK(ToString(RmlStringView{text.data, text.size}) == "10, 20");
+	rml_variant_set_char(variant, 'c');
+	CHECK_FALSE(rml_variant_to_string(variant, &text));
+	CHECK(Take(text) == "10, 20");
+
+	rml_variant_set_string(variant, rml_sv("3, 4"));
+	RmlVector2f v2 = {};
+	CHECK(rml_variant_get_vector2f(variant, &v2));
+	CHECK(v2.x == 3.f);
+	CHECK(v2.y == 4.f);
+
+	rml_variant_set_vector2i(variant, RmlVector2i{-7, 9});
+	CHECK(rml_variant_get_type(variant) == RML_VARIANT_TYPE_VECTOR2);
+	rml_variant_set_vector2f(variant, RmlVector2f{-1.75f, 2.75f});
+	RmlVector2i v2i = {};
+	CHECK(rml_variant_get_vector2i(variant, &v2i));
+	CHECK(v2i.x == -1);
+	CHECK(v2i.y == 2);
+
+	rml_variant_destroy(variant);
+}
+
+TEST_CASE("capi.values.dictionary_remove_clear_and_string_list_clear")
+{
+	RmlDictionary* dictionary = rml_dictionary_create();
+	RmlVariant* value = rml_variant_create();
+	rml_variant_set_int(value, 1);
+	rml_dictionary_set(dictionary, rml_sv("a"), value);
+	rml_dictionary_set(dictionary, rml_sv("b"), value);
+	rml_dictionary_set(dictionary, rml_sv("c"), value);
+
+	CHECK(rml_dictionary_remove(dictionary, rml_sv("b")));
+	CHECK_FALSE(rml_dictionary_remove(dictionary, rml_sv("b")));
+	CHECK(rml_dictionary_size(dictionary) == 2);
+	CHECK(rml_dictionary_get(dictionary, rml_sv("b")) == nullptr);
+	CHECK(rml_dictionary_get(dictionary, rml_sv("c")) != nullptr);
+	rml_dictionary_clear(dictionary);
+	CHECK(rml_dictionary_size(dictionary) == 0);
+	rml_variant_destroy(value);
+	rml_dictionary_destroy(dictionary);
+
+	RmlStringList* strings = rml_string_list_create();
+	rml_string_list_push(strings, rml_sv("x"));
+	rml_string_list_push(strings, rml_sv("y"));
+	rml_string_list_clear(strings);
+	CHECK(rml_string_list_size(strings) == 0);
+	rml_string_list_push(strings, rml_sv("z"));
+	CHECK(ToString(rml_string_list_get(strings, 0)) == "z");
+	rml_string_list_destroy(strings);
+}

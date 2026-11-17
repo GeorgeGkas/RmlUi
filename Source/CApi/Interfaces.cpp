@@ -40,7 +40,7 @@ RmlSystemInterface* rml_system_interface_create(const RmlSystemInterfaceCallback
 
 void rml_system_interface_destroy(RmlSystemInterface* iface)
 {
-	RMLUI_ASSERT(iface);
+	RMLUI_CAPI_REQUIRE_VOID(iface);
 	delete Rml::CApi::FromC(iface);
 }
 
@@ -58,7 +58,7 @@ RmlFileInterface* rml_file_interface_create(const RmlFileInterfaceCallbacks* cal
 
 void rml_file_interface_destroy(RmlFileInterface* iface)
 {
-	RMLUI_ASSERT(iface);
+	RMLUI_CAPI_REQUIRE_VOID(iface);
 	delete Rml::CApi::FromC(iface);
 }
 
@@ -76,7 +76,7 @@ RmlRenderInterface* rml_render_interface_create(const RmlRenderInterfaceCallback
 
 void rml_render_interface_destroy(RmlRenderInterface* iface)
 {
-	RMLUI_ASSERT(iface);
+	RMLUI_CAPI_REQUIRE_VOID(iface);
 	delete Rml::CApi::FromC(iface);
 }
 
@@ -92,6 +92,63 @@ RmlTextInputHandler* rml_text_input_handler_create(const RmlTextInputHandlerCall
 
 void rml_text_input_handler_destroy(RmlTextInputHandler* handler)
 {
-	RMLUI_ASSERT(handler);
+	RMLUI_CAPI_REQUIRE_VOID(handler);
 	delete Rml::CApi::FromC(handler);
+}
+
+static const Rml::TextInputContext* FromC(const RmlTextInputContext* input_context)
+{
+	return reinterpret_cast<const Rml::TextInputContext*>(input_context);
+}
+
+bool rml_text_input_context_get_bounding_box(const RmlTextInputContext* input_context, RmlRectanglef* out_rectangle)
+{
+	RMLUI_CAPI_REQUIRE(input_context && out_rectangle, false);
+	Rml::Rectanglef rectangle;
+	if (!FromC(input_context)->GetBoundingBox(rectangle))
+		return false;
+	*out_rectangle = Rml::CApi::ToC(rectangle);
+	return true;
+}
+
+void rml_text_input_context_get_selection_range(const RmlTextInputContext* input_context, int* out_start, int* out_end)
+{
+	RMLUI_CAPI_REQUIRE_VOID(input_context);
+	int start = 0, end = 0;
+	FromC(input_context)->GetSelectionRange(start, end);
+	if (out_start)
+		*out_start = start;
+	if (out_end)
+		*out_end = end;
+}
+
+void rml_text_input_context_set_selection_range(RmlTextInputContext* input_context, int start, int end)
+{
+	RMLUI_CAPI_REQUIRE_VOID(input_context);
+	Rml::CApi::FromC(input_context)->SetSelectionRange(start, end);
+}
+
+void rml_text_input_context_set_cursor_position(RmlTextInputContext* input_context, int position)
+{
+	RMLUI_CAPI_REQUIRE_VOID(input_context);
+	Rml::CApi::FromC(input_context)->SetCursorPosition(position);
+}
+
+void rml_text_input_context_set_text(RmlTextInputContext* input_context, RmlStringView text, int start, int end)
+{
+	RMLUI_CAPI_REQUIRE_VOID(input_context);
+	Rml::CApi::FromC(input_context)->SetText(Rml::StringView(text.data, text.data + (text.data ? text.size : 0)), start, end);
+}
+
+void rml_text_input_context_set_composition_range(RmlTextInputContext* input_context, int start, int end)
+{
+	RMLUI_CAPI_REQUIRE_VOID(input_context);
+	Rml::CApi::FromC(input_context)->SetCompositionRange(start, end);
+}
+
+void rml_text_input_context_commit_composition(RmlTextInputContext* input_context, RmlStringView composition)
+{
+	RMLUI_CAPI_REQUIRE_VOID(input_context);
+	Rml::CApi::FromC(input_context)->CommitComposition(
+		Rml::StringView(composition.data, composition.data + (composition.data ? composition.size : 0)));
 }

@@ -25,24 +25,11 @@ static_assert(alignof(RmlVector2f) == alignof(Rml::Vector2f));
 static_assert(offsetof(RmlVector2f, x) == offsetof(Rml::Vector2f, x));
 static_assert(offsetof(RmlVector2f, y) == offsetof(Rml::Vector2f, y));
 
-static_assert(sizeof(RmlVector3i) == sizeof(Rml::Vector3i));
-static_assert(alignof(RmlVector3i) == alignof(Rml::Vector3i));
-static_assert(offsetof(RmlVector3i, x) == offsetof(Rml::Vector3i, x));
-static_assert(offsetof(RmlVector3i, y) == offsetof(Rml::Vector3i, y));
-static_assert(offsetof(RmlVector3i, z) == offsetof(Rml::Vector3i, z));
-
 static_assert(sizeof(RmlVector3f) == sizeof(Rml::Vector3f));
 static_assert(alignof(RmlVector3f) == alignof(Rml::Vector3f));
 static_assert(offsetof(RmlVector3f, x) == offsetof(Rml::Vector3f, x));
 static_assert(offsetof(RmlVector3f, y) == offsetof(Rml::Vector3f, y));
 static_assert(offsetof(RmlVector3f, z) == offsetof(Rml::Vector3f, z));
-
-static_assert(sizeof(RmlVector4i) == sizeof(Rml::Vector4i));
-static_assert(alignof(RmlVector4i) == alignof(Rml::Vector4i));
-static_assert(offsetof(RmlVector4i, x) == offsetof(Rml::Vector4i, x));
-static_assert(offsetof(RmlVector4i, y) == offsetof(Rml::Vector4i, y));
-static_assert(offsetof(RmlVector4i, z) == offsetof(Rml::Vector4i, z));
-static_assert(offsetof(RmlVector4i, w) == offsetof(Rml::Vector4i, w));
 
 static_assert(sizeof(RmlVector4f) == sizeof(Rml::Vector4f));
 static_assert(alignof(RmlVector4f) == alignof(Rml::Vector4f));

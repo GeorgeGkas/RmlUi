@@ -60,7 +60,8 @@ RMLUI_CAPI_API RmlElement* rml_form_control_select_get_option(RmlElementFormCont
 RMLUI_CAPI_API int rml_form_control_select_get_num_options(RmlElementFormControlSelect* select);
 RMLUI_CAPI_API int rml_form_control_select_add_rml(RmlElementFormControlSelect* select, RmlStringView rml, RmlStringView value, int before,
 	bool selectable);
-/* Takes ownership of an unparented option. Returns -1 and leaves the element untouched when it already has a parent. */
+/* Takes ownership of a caller-owned option (see Element.h). Returns -1 and leaves the element untouched when RmlUi
+   already owns it. */
 RMLUI_CAPI_API int rml_form_control_select_add_element(RmlElementFormControlSelect* select, RmlElement* option_element, int before);
 RMLUI_CAPI_API void rml_form_control_select_remove(RmlElementFormControlSelect* select, int index);
 RMLUI_CAPI_API void rml_form_control_select_remove_all(RmlElementFormControlSelect* select);
@@ -97,9 +98,9 @@ RMLUI_CAPI_API void rml_progress_set_max(RmlElementProgress* progress, float max
 
 RMLUI_CAPI_API void rml_tab_set_set_tab_rml(RmlElementTabSet* tab_set, int tab_index, RmlStringView rml);
 RMLUI_CAPI_API void rml_tab_set_set_panel_rml(RmlElementTabSet* tab_set, int tab_index, RmlStringView rml);
-/* Takes ownership of an unparented element. Does nothing when the element already has a parent. */
+/* Takes ownership of a caller-owned element (see Element.h). Does nothing when RmlUi already owns it. */
 RMLUI_CAPI_API void rml_tab_set_set_tab_element(RmlElementTabSet* tab_set, int tab_index, RmlElement* element);
-/* Takes ownership of an unparented element. Does nothing when the element already has a parent. */
+/* Takes ownership of a caller-owned element (see Element.h). Does nothing when RmlUi already owns it. */
 RMLUI_CAPI_API void rml_tab_set_set_panel_element(RmlElementTabSet* tab_set, int tab_index, RmlElement* element);
 RMLUI_CAPI_API void rml_tab_set_remove_tab(RmlElementTabSet* tab_set, int tab_index);
 RMLUI_CAPI_API int rml_tab_set_get_num_tabs(RmlElementTabSet* tab_set);

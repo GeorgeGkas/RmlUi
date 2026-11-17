@@ -23,15 +23,85 @@
 #include <RmlUi/Core/TextInputContext.h>
 #include <RmlUi/Core/TextInputHandler.h>
 #include <RmlUi/Core/Types.h>
+#include <RmlUi/Core/Texture.h>
 #include <RmlUi/Core/Variant.h>
 #include <RmlUi/Core/Vertex.h>
 #include <cstring>
+#include <type_traits>
+
+// Argument checks that stay active in release builds: log an error and return a zero value instead of crashing.
+#define RMLUI_CAPI_REQUIRE(condition, result)                             \
+	do                                                                    \
+	{                                                                     \
+		if (!(condition))                                                 \
+		{                                                                 \
+			::Rml::CApi::ReportInvalidArgument(__func__, #condition);     \
+			return result;                                                \
+		}                                                                 \
+	} while (false)
+
+#define RMLUI_CAPI_REQUIRE_VOID(condition)                                \
+	do                                                                    \
+	{                                                                     \
+		if (!(condition))                                                 \
+		{                                                                 \
+			::Rml::CApi::ReportInvalidArgument(__func__, #condition);     \
+			return;                                                       \
+		}                                                                 \
+	} while (false)
+
 namespace Rml {
+class PropertyDictionary;
+class PropertySpecification;
+class RenderManager;
+struct Mesh;
+
 namespace CApi {
 
 Rml::String ToString(RmlStringView view);
 RmlStringView ToStringView(const Rml::String& string);
 RmlOwnedString ToOwnedString(const Rml::String& string);
+
+void ReportInvalidArgument(const char* function, const char* condition);
+
+// An element is caller-owned when nothing in RmlUi holds it: it has no parent, is not a document attached to a context,
+// and is not the root element of a context.
+bool IsCallerOwned(const Element* element);
+// Ensures that RmlUi can destroy a caller-owned element that was not created by an element instancer.
+void AdoptCallerElement(Element* element);
+
+// What an RmlPropertyDictionary handle points to. Property names are resolved through 'specification', which is the
+// instancer's own specification inside instancer callbacks and the global style sheet specification otherwise.
+struct PropertyDictionaryView {
+	const PropertyDictionary* dictionary;
+	const PropertySpecification* specification;
+};
+
+// Tracks plugins registered through the C API, since rml_shutdown ends every registration.
+void NotePluginRegistered(RmlPlugin* plugin, bool registered);
+void NotePluginsShutdown();
+
+Mesh MakeMesh(const RmlVertex* vertices, size_t num_vertices, const int* indices, size_t num_indices);
+// Returns the texture of 'source' for the given render manager, loading or generating it on first use.
+Texture GetTexture(const RmlTextureSource* source, RenderManager& render_manager);
+
+inline Texture FromC(RmlTexture value)
+{
+	static_assert(std::is_trivially_copyable_v<Texture>);
+	static_assert(sizeof(RmlTexture) == sizeof(Texture));
+	Texture result;
+	if (value.internal_render_manager)
+		std::memcpy(&result, &value, sizeof(result));
+	return result;
+}
+
+inline RmlTexture ToC(const Texture& value)
+{
+	RmlTexture result = {};
+	if (value)
+		std::memcpy(&result, &value, sizeof(result));
+	return result;
+}
 
 inline Context* FromC(RmlContext* context)
 {
@@ -336,19 +406,6 @@ inline RmlVector2f ToC(const Vector2f& value)
 	return result;
 }
 
-inline const Vector3i& FromC(const RmlVector3i& value)
-{
-	return *reinterpret_cast<const Vector3i*>(&value);
-}
-
-inline RmlVector3i ToC(const Vector3i& value)
-{
-	RmlVector3i result;
-	static_assert(sizeof(result) == sizeof(value));
-	std::memcpy(&result, &value, sizeof(result));
-	return result;
-}
-
 inline const Vector3f& FromC(const RmlVector3f& value)
 {
 	return *reinterpret_cast<const Vector3f*>(&value);
@@ -357,19 +414,6 @@ inline const Vector3f& FromC(const RmlVector3f& value)
 inline RmlVector3f ToC(const Vector3f& value)
 {
 	RmlVector3f result;
-	static_assert(sizeof(result) == sizeof(value));
-	std::memcpy(&result, &value, sizeof(result));
-	return result;
-}
-
-inline const Vector4i& FromC(const RmlVector4i& value)
-{
-	return *reinterpret_cast<const Vector4i*>(&value);
-}
-
-inline RmlVector4i ToC(const Vector4i& value)
-{
-	RmlVector4i result;
 	static_assert(sizeof(result) == sizeof(value));
 	std::memcpy(&result, &value, sizeof(result));
 	return result;

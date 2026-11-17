@@ -259,7 +259,7 @@ TEST_CASE("capi.element.mutation_transfers_ownership")
 	CHECK(rml_element_get_parent_node(p1) == list);
 	rml_element_release(p1);
 	CHECK(session.ById("p1") == p1);
-	CHECK(session.system_log.HasMessage("still has a parent"));
+	CHECK(session.system_log.HasMessage("owned by RmlUi"));
 
 	RmlElement* first = rml_document_create_element(document, rml_sv("p"));
 	CHECK(rml_element_insert_before(list, first, p1) == first);

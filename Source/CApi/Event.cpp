@@ -7,73 +7,73 @@
 
 RmlEventPhase rml_event_get_phase(const RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return static_cast<RmlEventPhase>(static_cast<int>(Rml::CApi::FromC(event)->GetPhase()));
 }
 
 RmlElement* rml_event_get_current_element(RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return Rml::CApi::ToC(Rml::CApi::FromC(event)->GetCurrentElement());
 }
 
 RmlElement* rml_event_get_target_element(const RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return Rml::CApi::ToC(Rml::CApi::FromC(event)->GetTargetElement());
 }
 
 RmlStringView rml_event_get_type(const RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return Rml::CApi::ToStringView(Rml::CApi::FromC(event)->GetType());
 }
 
 uint16_t rml_event_get_id(const RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return static_cast<uint16_t>(Rml::CApi::FromC(event)->GetId());
 }
 
 void rml_event_stop_propagation(RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE_VOID(event);
 	Rml::CApi::FromC(event)->StopPropagation();
 }
 
 void rml_event_stop_immediate_propagation(RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE_VOID(event);
 	Rml::CApi::FromC(event)->StopImmediatePropagation();
 }
 
 bool rml_event_is_interruptible(const RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return Rml::CApi::FromC(event)->IsInterruptible();
 }
 
 bool rml_event_is_propagating(const RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return Rml::CApi::FromC(event)->IsPropagating();
 }
 
 bool rml_event_is_immediate_propagating(const RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return Rml::CApi::FromC(event)->IsImmediatePropagating();
 }
 
 const RmlDictionary* rml_event_get_parameters(const RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return Rml::CApi::ToC(&Rml::CApi::FromC(event)->GetParameters());
 }
 
 RmlVector2f rml_event_get_unprojected_mouse_screen_pos(const RmlEvent* event)
 {
-	RMLUI_ASSERT(event);
+	RMLUI_CAPI_REQUIRE(event, {});
 	return Rml::CApi::ToC(Rml::CApi::FromC(event)->GetUnprojectedMouseScreenPos());
 }
 
@@ -104,6 +104,6 @@ RmlEventListener* rml_event_listener_create(const RmlEventListenerCallbacks* cal
 
 void rml_event_listener_destroy(RmlEventListener* listener)
 {
-	RMLUI_ASSERT(listener);
+	RMLUI_CAPI_REQUIRE_VOID(listener);
 	delete Rml::CApi::FromC(listener);
 }

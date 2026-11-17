@@ -11,6 +11,7 @@ add_library(rmlui_capi
 	Event.cpp
 	DataModel.cpp
 	Factory.cpp
+	Render.cpp
 	StyleSheet.cpp
 	Debugger.cpp
 	Log.cpp
@@ -31,6 +32,7 @@ target_sources(rmlui_capi PRIVATE
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/CApi/Event.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/CApi/DataModel.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/CApi/Factory.h"
+	"${PROJECT_SOURCE_DIR}/Include/RmlUi/CApi/Render.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/CApi/StyleSheet.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/CApi/Debugger.h"
 	"${PROJECT_SOURCE_DIR}/Include/RmlUi/CApi/Log.h"

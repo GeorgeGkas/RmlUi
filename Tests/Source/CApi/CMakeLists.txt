@@ -16,7 +16,8 @@ add_executable(${TARGET_NAME}
 	FormControls.cpp
 	ValueTypes.cpp
 	InterfaceCallbacks.cpp
-	KnownIssues.cpp
+	Regressions.cpp
+	Rendering.cpp
 )
 
 # Pure C compilation check: CApi headers must be valid C99.

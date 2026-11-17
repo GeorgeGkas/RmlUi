@@ -8,10 +8,15 @@
 extern "C" {
 #endif
 
-/* --- Element ownership --- */
+/* --- Element ownership ---
+   An element is caller-owned when RmlUi holds no reference to it: it has no parent, is not a document attached to a
+   context (loaded or pending unload), and is not the root element of a context. Elements returned by
+   rml_element_clone, rml_element_remove_child, rml_element_replace_child, rml_document_create_element,
+   rml_document_create_text_node and rml_element_create_custom are caller-owned. Functions that take ownership leave
+   elements owned by RmlUi untouched. */
 
 RMLUI_CAPI_API RmlElement* rml_element_clone(const RmlElement* element);
-/* Destroys an element owned by the caller. Does nothing when the element still has a parent. */
+/* Destroys a caller-owned element. Logs a warning and does nothing for elements owned by RmlUi. */
 RMLUI_CAPI_API void rml_element_release(RmlElement* element);
 
 /* --- Classes --- */
@@ -39,6 +44,8 @@ RMLUI_CAPI_API RmlFontFaceHandle rml_element_get_font_face_handle(const RmlEleme
 
 RMLUI_CAPI_API bool rml_element_set_property(RmlElement* element, RmlStringView name, RmlStringView value);
 RMLUI_CAPI_API void rml_element_remove_property(RmlElement* element, RmlStringView name);
+/* Like Element::GetProperty, returns true for every registered property name, since every element has a computed
+   value for each property. Use rml_element_has_local_property to test whether the element itself declares it. */
 RMLUI_CAPI_API bool rml_element_has_property(RmlElement* element, RmlStringView name);
 RMLUI_CAPI_API RmlOwnedString rml_element_get_property_string(RmlElement* element, RmlStringView name);
 RMLUI_CAPI_API bool rml_element_has_local_property(RmlElement* element, RmlStringView name);
@@ -138,10 +145,16 @@ RMLUI_CAPI_API void rml_element_scroll_to(RmlElement* element, RmlVector2f offse
 
 /* --- DOM mutation (child ownership) --- */
 
-/* Takes ownership of an unparented child. Returns null and leaves the child untouched when it already has a parent. */
+/* Takes ownership of a caller-owned child and returns it. Returns null and leaves the child untouched when RmlUi
+   already owns it. */
 RMLUI_CAPI_API RmlElement* rml_element_append_child(RmlElement* element, RmlElement* child);
+/* Like rml_element_append_child, but inserts before adjacent_element. Appends when adjacent_element is null or not a
+   child of element. */
 RMLUI_CAPI_API RmlElement* rml_element_insert_before(RmlElement* element, RmlElement* child, RmlElement* adjacent_element);
+/* Replaces old_child with the caller-owned new_child and returns old_child, which becomes caller-owned. Returns null
+   and takes nothing when new_child is owned by RmlUi or old_child is not a child of element. */
 RMLUI_CAPI_API RmlElement* rml_element_replace_child(RmlElement* element, RmlElement* new_child, RmlElement* old_child);
+/* Detaches child and returns it as caller-owned. Returns null when child is not a child of element. */
 RMLUI_CAPI_API RmlElement* rml_element_remove_child(RmlElement* element, RmlElement* child);
 
 /* --- DOM query --- */

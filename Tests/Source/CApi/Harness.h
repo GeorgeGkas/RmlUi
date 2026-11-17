@@ -26,8 +26,11 @@ struct RenderLog {
 	int compiled_geometry = 0;
 	int rendered_geometry = 0;
 	int released_geometry = 0;
+	// Texture passed to each render_geometry and render_shader call, in order.
+	std::vector<RmlTextureHandle> rendered_textures;
 	std::vector<std::string> texture_sources;
 	int generated_textures = 0;
+	std::vector<RmlVector2i> generated_dimensions;
 	int released_textures = 0;
 	int scissor_enables = 0;
 	int clip_mask_enables = 0;

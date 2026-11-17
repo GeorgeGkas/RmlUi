@@ -34,6 +34,10 @@ RMLUI_CAPI_API RmlElement* rml_context_get_hover_element(RmlContext* ctx);
 RMLUI_CAPI_API RmlElement* rml_context_get_focus_element(RmlContext* ctx);
 RMLUI_CAPI_API RmlElement* rml_context_get_root_element(RmlContext* ctx);
 RMLUI_CAPI_API RmlElement* rml_context_get_element_at_point(RmlContext* ctx, RmlVector2f point, const RmlElement* ignore_element);
+/* Like rml_context_get_element_at_point, but searches only element and its descendants. element may be null to search
+   from the root element. */
+RMLUI_CAPI_API RmlElement* rml_context_get_element_at_point_within(RmlContext* ctx, RmlVector2f point, const RmlElement* ignore_element,
+	RmlElement* element);
 
 RMLUI_CAPI_API void rml_context_pull_document_to_front(RmlContext* ctx, RmlElementDocument* document);
 RMLUI_CAPI_API void rml_context_push_document_to_back(RmlContext* ctx, RmlElementDocument* document);
@@ -70,9 +74,12 @@ RMLUI_CAPI_API RmlDataModelConstructor rml_context_create_data_model(RmlContext*
 RMLUI_CAPI_API RmlDataModelConstructor rml_context_get_data_model(RmlContext* ctx, RmlStringView name);
 RMLUI_CAPI_API bool rml_context_remove_data_model(RmlContext* ctx, RmlStringView name);
 
+/* Constructors and handles refer to the data model by pointer and must not be used after it is removed, either by
+   rml_context_remove_data_model or when its context is removed. The functions below reject null (invalid) handles. */
 RMLUI_CAPI_API bool rml_data_model_constructor_is_valid(RmlDataModelConstructor constructor);
 RMLUI_CAPI_API RmlDataModelHandle rml_data_model_get_handle(RmlDataModelConstructor constructor);
 
+RMLUI_CAPI_API bool rml_data_model_handle_is_valid(RmlDataModelHandle handle);
 RMLUI_CAPI_API bool rml_data_model_handle_is_variable_dirty(RmlDataModelHandle handle, RmlStringView variable_name);
 RMLUI_CAPI_API void rml_data_model_handle_dirty_variable(RmlDataModelHandle handle, RmlStringView variable_name);
 RMLUI_CAPI_API void rml_data_model_handle_dirty_all_variables(RmlDataModelHandle handle);

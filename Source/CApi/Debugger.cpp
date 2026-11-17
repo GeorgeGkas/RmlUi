@@ -5,7 +5,7 @@
 
 bool rml_debugger_initialise(RmlContext* ctx)
 {
-	RMLUI_ASSERT(ctx);
+	RMLUI_CAPI_REQUIRE(ctx, {});
 	return Rml::Debugger::Initialise(Rml::CApi::FromC(ctx));
 }
 
@@ -16,7 +16,7 @@ void rml_debugger_shutdown(void)
 
 bool rml_debugger_set_context(RmlContext* ctx)
 {
-	RMLUI_ASSERT(ctx);
+	RMLUI_CAPI_REQUIRE(ctx, {});
 	return Rml::Debugger::SetContext(Rml::CApi::FromC(ctx));
 }
 

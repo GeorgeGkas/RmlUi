@@ -13,6 +13,7 @@ bool rml_initialise(void)
 void rml_shutdown(void)
 {
 	Rml::Shutdown();
+	Rml::CApi::NotePluginsShutdown();
 }
 
 RmlOwnedString rml_get_version(void)
@@ -112,27 +113,21 @@ bool rml_load_font_face_with_family(RmlStringView path, RmlStringView family, Rm
 bool rml_load_font_face_from_memory(const void* data, size_t data_size, RmlStringView family, RmlFontStyle style, RmlFontWeight weight,
 	bool fallback, int face_index)
 {
-	RMLUI_ASSERT(data || data_size == 0);
+	RMLUI_CAPI_REQUIRE(data || data_size == 0, {});
 	return Rml::LoadFontFace(Rml::Span<const Rml::byte>(static_cast<const Rml::byte*>(data), data_size), Rml::CApi::ToString(family),
 		static_cast<Rml::Style::FontStyle>(style), static_cast<Rml::Style::FontWeight>(weight), fallback, face_index);
 }
 
-namespace Rml {
-namespace CApi {
-void NotePluginRegistered(RmlPlugin* plugin, bool registered);
-}
-} // namespace Rml
-
 void rml_register_plugin(RmlPlugin* plugin)
 {
-	RMLUI_ASSERT(plugin);
+	RMLUI_CAPI_REQUIRE_VOID(plugin);
 	Rml::CApi::NotePluginRegistered(plugin, true);
 	Rml::RegisterPlugin(Rml::CApi::FromC(plugin));
 }
 
 void rml_unregister_plugin(RmlPlugin* plugin)
 {
-	RMLUI_ASSERT(plugin);
+	RMLUI_CAPI_REQUIRE_VOID(plugin);
 	Rml::CApi::NotePluginRegistered(plugin, false);
 	Rml::UnregisterPlugin(Rml::CApi::FromC(plugin));
 }
@@ -167,4 +162,10 @@ void rml_release_font_resources(void)
 void rml_release_render_managers(void)
 {
 	Rml::ReleaseRenderManagers();
+}
+
+void rml_get_texture_source_list(RmlStringList* out_sources)
+{
+	RMLUI_CAPI_REQUIRE_VOID(out_sources);
+	*Rml::CApi::FromC(out_sources) = Rml::GetTextureSourceList();
 }

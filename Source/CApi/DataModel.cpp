@@ -39,6 +39,9 @@ public:
 
 	Rml::DataVariable Child(void* ptr, const Rml::DataAddressEntry& address) override
 	{
+		if (Type() == Rml::DataVariableType::Array && address.index < 0 && address.name == "size")
+			return Rml::MakeLiteralIntVariable(Size(ptr));
+
 		RmlDataVariable child = {};
 		if (address.index >= 0)
 		{
@@ -98,6 +101,11 @@ bool rml_data_model_bind_int(RmlDataModelConstructor constructor, RmlStringView 
 }
 
 bool rml_data_model_bind_int64(RmlDataModelConstructor constructor, RmlStringView name, int64_t* ptr)
+{
+	return BindScalar(constructor, name, ptr);
+}
+
+bool rml_data_model_bind_uint(RmlDataModelConstructor constructor, RmlStringView name, unsigned int* ptr)
 {
 	return BindScalar(constructor, name, ptr);
 }

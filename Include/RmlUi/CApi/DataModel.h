@@ -10,10 +10,12 @@ extern "C" {
 /*
     Direct scalar bindings. RmlUi reads and writes the caller's memory.
     The pointed-to value must stay valid until the data model is removed.
+    Bools render as 1 and 0 in {{ }} expressions; use a ternary such as {{ flag ? 'yes' : 'no' }} for other text.
  */
 RMLUI_CAPI_API bool rml_data_model_bind_bool(RmlDataModelConstructor constructor, RmlStringView name, bool* ptr);
 RMLUI_CAPI_API bool rml_data_model_bind_int(RmlDataModelConstructor constructor, RmlStringView name, int* ptr);
 RMLUI_CAPI_API bool rml_data_model_bind_int64(RmlDataModelConstructor constructor, RmlStringView name, int64_t* ptr);
+RMLUI_CAPI_API bool rml_data_model_bind_uint(RmlDataModelConstructor constructor, RmlStringView name, unsigned int* ptr);
 RMLUI_CAPI_API bool rml_data_model_bind_uint64(RmlDataModelConstructor constructor, RmlStringView name, uint64_t* ptr);
 RMLUI_CAPI_API bool rml_data_model_bind_float(RmlDataModelConstructor constructor, RmlStringView name, float* ptr);
 RMLUI_CAPI_API bool rml_data_model_bind_double(RmlDataModelConstructor constructor, RmlStringView name, double* ptr);
@@ -41,7 +43,8 @@ typedef struct RmlDataTypeDefinitionCallbacks {
 	RmlDataTypeMemberNamesFunc member_names;
 } RmlDataTypeDefinitionCallbacks;
 
-/* Caller owns the definition and must destroy it after every data model that uses it is gone. */
+/* Caller owns the definition and must destroy it after every data model that uses it is gone.
+   Array definitions answer 'size' (as in {{ list.size }}) from the size callback; child_by_name is not called for it. */
 RMLUI_CAPI_API RmlDataTypeDefinition* rml_data_type_definition_create(RmlDataVariableType type,
 	const RmlDataTypeDefinitionCallbacks* callbacks, void* user_data);
 RMLUI_CAPI_API void rml_data_type_definition_destroy(RmlDataTypeDefinition* definition);

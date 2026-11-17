@@ -48,6 +48,11 @@ typedef struct RmlPropertyDictionary RmlPropertyDictionary;
 typedef struct RmlStyleSheetContainer RmlStyleSheetContainer;
 typedef struct RmlPropertyIdSet RmlPropertyIdSet;
 typedef struct RmlTexturedMeshList RmlTexturedMeshList;
+typedef struct RmlDecoratorInstancerInterface RmlDecoratorInstancerInterface;
+typedef struct RmlTextureSource RmlTextureSource;
+typedef struct RmlTextureGenerator RmlTextureGenerator;
+typedef struct RmlGeometry RmlGeometry;
+typedef struct RmlCompiledShader RmlCompiledShader;
 
 typedef struct RmlVector2i {
 	int x;
@@ -59,24 +64,11 @@ typedef struct RmlVector2f {
 	float y;
 } RmlVector2f;
 
-typedef struct RmlVector3i {
-	int x;
-	int y;
-	int z;
-} RmlVector3i;
-
 typedef struct RmlVector3f {
 	float x;
 	float y;
 	float z;
 } RmlVector3f;
-
-typedef struct RmlVector4i {
-	int x;
-	int y;
-	int z;
-	int w;
-} RmlVector4i;
 
 typedef struct RmlVector4f {
 	float x;
@@ -216,6 +208,16 @@ typedef uintptr_t RmlFileHandle;
 typedef uintptr_t RmlFontFaceHandle;
 typedef uintptr_t RmlFontEffectsHandle;
 typedef uintptr_t RmlDecoratorDataHandle;
+
+/* A copyable view of a texture loaded through a render manager, like Rml::Texture. Treat the fields as private.
+   A zero-initialised value means no texture. The view does not own the texture and stays valid while the render
+   manager that produced it exists (until the context is removed or rml_release_render_managers/rml_shutdown is called),
+   and, for callback textures, while the texture source that produced it exists. */
+typedef struct RmlTexture {
+	const void* internal_render_manager;
+	uint32_t internal_file_index;
+	uint32_t internal_callback_index;
+} RmlTexture;
 
 typedef enum RmlLogType {
 	RML_LOG_TYPE_ALWAYS = 0,

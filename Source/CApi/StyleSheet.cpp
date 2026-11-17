@@ -7,12 +7,20 @@
 #include <RmlUi/Core/PropertyDefinition.h>
 #include <RmlUi/Core/StyleSheetContainer.h>
 #include <RmlUi/Core/PropertyIdSet.h>
+#include <RmlUi/Core/PropertySpecification.h>
 #include <RmlUi/Core/StyleSheetSpecification.h>
 
 namespace {
 
 struct StyleSheetBox {
 	Rml::SharedPtr<Rml::StyleSheetContainer> container;
+};
+
+// Dictionary created by rml_property_dictionary_create. The view must be the first member, since every
+// RmlPropertyDictionary handle points to a PropertyDictionaryView.
+struct OwnedPropertyDictionary {
+	Rml::CApi::PropertyDictionaryView view;
+	Rml::PropertyDictionary dictionary;
 };
 
 } // namespace
@@ -40,8 +48,8 @@ void rml_style_sheet_container_destroy(RmlStyleSheetContainer* container)
 
 void rml_document_set_style_sheet_container(RmlElementDocument* document, RmlStyleSheetContainer* container)
 {
-	RMLUI_ASSERT(document);
-	RMLUI_ASSERT(container);
+	RMLUI_CAPI_REQUIRE_VOID(document);
+	RMLUI_CAPI_REQUIRE_VOID(container);
 	Rml::CApi::FromC(document)->SetStyleSheetContainer(reinterpret_cast<StyleSheetBox*>(container)->container);
 }
 
@@ -64,7 +72,7 @@ RmlPropertyDefinition* rml_style_sheet_register_property(RmlStringView name, Rml
 
 void rml_property_definition_add_parser(RmlPropertyDefinition* definition, RmlStringView parser_name, RmlStringView parser_parameters)
 {
-	RMLUI_ASSERT(definition);
+	RMLUI_CAPI_REQUIRE_VOID(definition);
 	reinterpret_cast<Rml::PropertyDefinition*>(definition)->AddParser(Rml::CApi::ToString(parser_name), Rml::CApi::ToString(parser_parameters));
 }
 
@@ -76,18 +84,20 @@ uint8_t rml_style_sheet_register_shorthand(RmlStringView shorthand_name, RmlStri
 
 RmlPropertyDictionary* rml_property_dictionary_create(void)
 {
-	return reinterpret_cast<RmlPropertyDictionary*>(new Rml::PropertyDictionary());
+	auto* owned = new OwnedPropertyDictionary();
+	owned->view = Rml::CApi::PropertyDictionaryView{&owned->dictionary, nullptr};
+	return reinterpret_cast<RmlPropertyDictionary*>(owned);
 }
 
 void rml_property_dictionary_destroy(RmlPropertyDictionary* dictionary)
 {
-	delete reinterpret_cast<Rml::PropertyDictionary*>(dictionary);
+	delete reinterpret_cast<OwnedPropertyDictionary*>(dictionary);
 }
 
 bool rml_style_sheet_parse_property_declaration(RmlPropertyDictionary* dictionary, RmlStringView property_name, RmlStringView property_value)
 {
-	RMLUI_ASSERT(dictionary);
-	return Rml::StyleSheetSpecification::ParsePropertyDeclaration(*reinterpret_cast<Rml::PropertyDictionary*>(dictionary),
+	RMLUI_CAPI_REQUIRE(dictionary, {});
+	return Rml::StyleSheetSpecification::ParsePropertyDeclaration(reinterpret_cast<OwnedPropertyDictionary*>(dictionary)->dictionary,
 		Rml::CApi::ToString(property_name), Rml::CApi::ToString(property_value));
 }
 
@@ -112,12 +122,15 @@ size_t rml_property_id_set_size(const RmlPropertyIdSet* set)
 
 RmlOwnedString rml_property_dictionary_get_string(const RmlPropertyDictionary* dictionary, RmlStringView property_name)
 {
-	RMLUI_ASSERT(dictionary);
-	const Rml::PropertyDictionary& properties = *reinterpret_cast<const Rml::PropertyDictionary*>(dictionary);
+	RMLUI_CAPI_REQUIRE(dictionary, {});
+	const auto& view = *reinterpret_cast<const Rml::CApi::PropertyDictionaryView*>(dictionary);
+	const Rml::PropertySpecification& specification =
+		view.specification ? *view.specification : Rml::StyleSheetSpecification::GetPropertySpecification();
 	const Rml::String name = Rml::CApi::ToString(property_name);
-	const Rml::Property* property = properties.GetProperty(Rml::StyleSheetSpecification::GetPropertyId(name));
+	const Rml::PropertyDefinition* definition = specification.GetProperty(name);
+	const Rml::Property* property = definition ? view.dictionary->GetProperty(definition->GetId()) : nullptr;
 	if (!property)
-		property = properties.GetCustomProperty(name);
+		property = view.dictionary->GetCustomProperty(name);
 	if (!property)
 		return {};
 	return Rml::CApi::ToOwnedString(property->ToString());

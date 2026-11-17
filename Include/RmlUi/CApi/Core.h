@@ -35,12 +35,16 @@ RMLUI_CAPI_API RmlContext* rml_get_context_by_name(RmlStringView name);
 RMLUI_CAPI_API RmlContext* rml_get_context_by_index(int index);
 RMLUI_CAPI_API int rml_get_num_contexts(void);
 
+/* Font family names are matched case-insensitively: the default font engine stores them in lowercase, so a family
+   loaded as "Delicious" is referred to by font-family: delicious or Delicious alike. */
 RMLUI_CAPI_API bool rml_load_font_face(RmlStringView path, bool fallback, RmlFontWeight weight, int face_index);
 RMLUI_CAPI_API bool rml_load_font_face_with_family(RmlStringView path, RmlStringView family, RmlFontStyle style, RmlFontWeight weight,
 	bool fallback, int face_index);
+/* data is not copied and must stay valid until after rml_shutdown. */
 RMLUI_CAPI_API bool rml_load_font_face_from_memory(const void* data, size_t data_size, RmlStringView family, RmlFontStyle style,
 	RmlFontWeight weight, bool fallback, int face_index);
 
+/* The plugin must stay alive while registered. See RmlPluginCallbacks for when its callbacks are called. */
 RMLUI_CAPI_API void rml_register_plugin(RmlPlugin* plugin);
 RMLUI_CAPI_API void rml_unregister_plugin(RmlPlugin* plugin);
 
@@ -52,6 +56,8 @@ RMLUI_CAPI_API bool rml_release_texture(RmlStringView source, RmlRenderInterface
 RMLUI_CAPI_API void rml_release_compiled_geometry(RmlRenderInterface* render_interface);
 RMLUI_CAPI_API void rml_release_font_resources(void);
 RMLUI_CAPI_API void rml_release_render_managers(void);
+/* Replaces the contents of out_sources with the sources of all file textures loaded by any render manager. */
+RMLUI_CAPI_API void rml_get_texture_source_list(RmlStringList* out_sources);
 
 #ifdef __cplusplus
 }

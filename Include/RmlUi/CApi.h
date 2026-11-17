@@ -13,6 +13,7 @@
 #include "RmlUi/CApi/Event.h"
 #include "RmlUi/CApi/DataModel.h"
 #include "RmlUi/CApi/Factory.h"
+#include "RmlUi/CApi/Render.h"
 #include "RmlUi/CApi/StyleSheet.h"
 #include "RmlUi/CApi/Debugger.h"
 

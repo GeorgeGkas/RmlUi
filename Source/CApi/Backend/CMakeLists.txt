@@ -31,3 +31,12 @@ endif()
 set_target_properties(rmlui_capi_backend PROPERTIES
 	EXPORT_NAME "CApiBackend"
 )
+
+# Installed without an export set: the backend interface libraries it links are not exported, and bindings only need
+# the library file. Static builds must also link the backend's platform dependencies.
+install(TARGETS rmlui_capi_backend
+	RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+install_target_pdb(rmlui_capi_backend)

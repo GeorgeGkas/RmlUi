@@ -7,9 +7,14 @@
 extern "C" {
 #endif
 
+/* Interface objects follow the C++ lifetime rules: the system, file and font engine interfaces, and any render
+   interface or text input handler passed to rml_create_context, must stay alive until after rml_shutdown.
+   Callbacks that write an RmlOwnedString receive a zero-initialised *out and must fill it with rml_owned_string_set.
+   Null callbacks use the default C++ implementation. */
 typedef struct RmlSystemInterfaceCallbacks {
 	double (*get_elapsed_time)(void* user_data);
 	int (*translate_string)(void* user_data, RmlOwnedString* out_translated, RmlStringView input);
+	/* document_path is the path of the document or style sheet that references path, which may be relative to it. */
 	void (*join_path)(void* user_data, RmlOwnedString* out_path, RmlStringView document_path, RmlStringView path);
 	bool (*log_message)(void* user_data, RmlLogType type, RmlStringView message);
 	void (*set_mouse_cursor)(void* user_data, RmlStringView cursor_name);
@@ -56,11 +61,26 @@ typedef struct RmlRenderInterfaceCallbacks {
 	void (*release_shader)(void* user_data, RmlCompiledShaderHandle shader);
 } RmlRenderInterfaceCallbacks;
 
+/* input_context stays valid from on_activate until on_destroy is called for it, and can be used with the
+   rml_text_input_context_* functions in the meantime, for example to implement IME composition. */
 typedef struct RmlTextInputHandlerCallbacks {
 	void (*on_activate)(void* user_data, RmlTextInputContext* input_context);
 	void (*on_deactivate)(void* user_data, RmlTextInputContext* input_context);
 	void (*on_destroy)(void* user_data, RmlTextInputContext* input_context);
 } RmlTextInputHandlerCallbacks;
+
+/* Wrappers for Rml::TextInputContext. Positions and ranges count characters (code points), not bytes; end is the first
+   character after the range. */
+RMLUI_CAPI_API bool rml_text_input_context_get_bounding_box(const RmlTextInputContext* input_context, RmlRectanglef* out_rectangle);
+RMLUI_CAPI_API void rml_text_input_context_get_selection_range(const RmlTextInputContext* input_context, int* out_start, int* out_end);
+RMLUI_CAPI_API void rml_text_input_context_set_selection_range(RmlTextInputContext* input_context, int start, int end);
+RMLUI_CAPI_API void rml_text_input_context_set_cursor_position(RmlTextInputContext* input_context, int position);
+/* Replaces the range with text, ignoring restrictions such as the maximum length. */
+RMLUI_CAPI_API void rml_text_input_context_set_text(RmlTextInputContext* input_context, RmlStringView text, int start, int end);
+RMLUI_CAPI_API void rml_text_input_context_set_composition_range(RmlTextInputContext* input_context, int start, int end);
+/* Replaces the composition range with composition, respecting restrictions such as the maximum length. Does nothing
+   while the composition range is empty. */
+RMLUI_CAPI_API void rml_text_input_context_commit_composition(RmlTextInputContext* input_context, RmlStringView composition);
 
 RMLUI_CAPI_API RmlSystemInterface* rml_system_interface_create(const RmlSystemInterfaceCallbacks* callbacks, void* user_data);
 RMLUI_CAPI_API void rml_system_interface_destroy(RmlSystemInterface* iface);
@@ -82,6 +102,7 @@ typedef struct RmlFontEngineInterfaceCallbacks {
 		RmlFontWeight weight, bool fallback_face);
 	bool (*load_font_face_from_memory)(void* user_data, const void* data, size_t data_size, int face_index, RmlStringView family, RmlFontStyle style,
 		RmlFontWeight weight, bool fallback_face);
+	/* family is always lowercase, since RmlUi lowercases font-family values. Match loaded families case-insensitively. */
 	RmlFontFaceHandle (*get_font_face_handle)(void* user_data, RmlStringView family, RmlFontStyle style, RmlFontWeight weight, int size);
 	bool (*get_font_metrics)(void* user_data, RmlFontFaceHandle handle, RmlFontMetrics* out_metrics);
 	int (*get_string_width)(void* user_data, RmlFontFaceHandle handle, RmlStringView string, const RmlTextShapingContext* text_shaping_context,
@@ -98,6 +119,10 @@ typedef struct RmlFontEngineInterfaceCallbacks {
 /* Appends one untextured mesh. Vertices are copied. out_meshes is valid only during generate_string. */
 RMLUI_CAPI_API void rml_textured_mesh_list_push(RmlTexturedMeshList* list, const RmlVertex* vertices, size_t num_vertices, const int* indices,
 	size_t num_indices);
+/* Appends one mesh textured from texture, loaded for the render manager that is generating the string. Usually a
+   callback texture source that renders the glyph atlas (see Render.h). texture may be null for an untextured mesh. */
+RMLUI_CAPI_API void rml_textured_mesh_list_push_textured(RmlTexturedMeshList* list, const RmlVertex* vertices, size_t num_vertices,
+	const int* indices, size_t num_indices, const RmlTextureSource* texture);
 
 RMLUI_CAPI_API RmlFontEngineInterface* rml_font_engine_interface_create(const RmlFontEngineInterfaceCallbacks* callbacks, void* user_data);
 RMLUI_CAPI_API void rml_font_engine_interface_destroy(RmlFontEngineInterface* iface);

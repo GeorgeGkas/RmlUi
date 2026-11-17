@@ -24,6 +24,9 @@ RMLUI_CAPI_API RmlPropertyDictionary* rml_property_dictionary_create(void);
 RMLUI_CAPI_API void rml_property_dictionary_destroy(RmlPropertyDictionary* dictionary);
 RMLUI_CAPI_API bool rml_style_sheet_parse_property_declaration(RmlPropertyDictionary* dictionary, RmlStringView property_name,
 	RmlStringView property_value);
+/* Returns the value of the named property as a string, or a null string when it is not set. Inside decorator, filter and
+   font effect instancer callbacks, names are resolved through the properties registered on that instancer; otherwise
+   through the global style sheet properties. Custom properties (--name) are looked up by name. */
 RMLUI_CAPI_API RmlOwnedString rml_property_dictionary_get_string(const RmlPropertyDictionary* dictionary, RmlStringView property_name);
 
 /* Returns 0 when the name is not a registered property. */

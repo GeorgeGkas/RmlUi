@@ -57,9 +57,10 @@ namespace {
 	{
 		return static_cast<RmlCompiledGeometryHandle>(++Ren(user_data).compiled_geometry);
 	}
-	void RenderGeometry(void* user_data, RmlCompiledGeometryHandle, RmlVector2f, RmlTextureHandle)
+	void RenderGeometry(void* user_data, RmlCompiledGeometryHandle, RmlVector2f, RmlTextureHandle texture)
 	{
 		Ren(user_data).rendered_geometry += 1;
+		Ren(user_data).rendered_textures.push_back(texture);
 	}
 	void ReleaseGeometry(void* user_data, RmlCompiledGeometryHandle)
 	{
@@ -72,8 +73,9 @@ namespace {
 		*out_dimensions = RmlVector2i{32, 32};
 		return static_cast<RmlTextureHandle>(1000 + log.texture_sources.size());
 	}
-	RmlTextureHandle GenerateTexture(void* user_data, const unsigned char*, size_t, RmlVector2i)
+	RmlTextureHandle GenerateTexture(void* user_data, const unsigned char*, size_t, RmlVector2i dimensions)
 	{
+		Ren(user_data).generated_dimensions.push_back(dimensions);
 		return static_cast<RmlTextureHandle>(2000 + ++Ren(user_data).generated_textures);
 	}
 	void ReleaseTexture(void* user_data, RmlTextureHandle)
@@ -149,9 +151,10 @@ namespace {
 		rml_dictionary_for_each(parameters, &CollectKey, &log.shader_parameter_keys);
 		return static_cast<RmlCompiledShaderHandle>(600 + log.compiled_shaders.size());
 	}
-	void RenderShader(void* user_data, RmlCompiledShaderHandle, RmlCompiledGeometryHandle, RmlVector2f, RmlTextureHandle)
+	void RenderShader(void* user_data, RmlCompiledShaderHandle, RmlCompiledGeometryHandle, RmlVector2f, RmlTextureHandle texture)
 	{
 		Ren(user_data).rendered_shaders += 1;
+		Ren(user_data).rendered_textures.push_back(texture);
 	}
 	void ReleaseShader(void* user_data, RmlCompiledShaderHandle)
 	{

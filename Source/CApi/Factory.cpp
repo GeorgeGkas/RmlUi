@@ -14,25 +14,26 @@
 #include <RmlUi/Core/FontEffect.h>
 #include <RmlUi/Core/FontEffectInstancer.h>
 #include <RmlUi/Core/FontEngineInterface.h>
+#include <RmlUi/Core/FontGlyph.h>
 #include <RmlUi/Core/Mesh.h>
 #include <RmlUi/Core/Plugin.h>
 #include <RmlUi/Core/PropertyDictionary.h>
 #include <RmlUi/Core/RenderManager.h>
+#include <RmlUi/Core/Spritesheet.h>
 #include <RmlUi/Core/TextShapingContext.h>
+#include <algorithm>
 #include <map>
 
 namespace {
 
 class PluginAdapter final : public Rml::Plugin {
 public:
-	PluginAdapter(const RmlPluginCallbacks& callbacks, void* user_data) : callbacks(callbacks), user_data(user_data) {}
+	// RmlUi queries the event classes on both registration and unregistration, so they are read once to stay constant.
+	PluginAdapter(const RmlPluginCallbacks& callbacks, void* user_data) :
+		callbacks(callbacks), user_data(user_data), event_classes(callbacks.get_event_classes ? callbacks.get_event_classes(user_data) : EVT_ALL)
+	{}
 
-	int GetEventClasses() override
-	{
-		if (callbacks.get_event_classes)
-			return callbacks.get_event_classes(user_data);
-		return EVT_ALL;
-	}
+	int GetEventClasses() override { return event_classes; }
 	void OnInitialise() override
 	{
 		if (callbacks.on_initialise)
@@ -43,9 +44,6 @@ public:
 
 	void OnShutdown() override
 	{
-		if (shutdown_notified)
-			return;
-		shutdown_notified = true;
 		if (callbacks.on_shutdown)
 			callbacks.on_shutdown(user_data);
 	}
@@ -98,9 +96,16 @@ public:
 private:
 	RmlPluginCallbacks callbacks;
 	void* user_data;
+	int event_classes;
 	bool is_registered = false;
-	bool shutdown_notified = false;
 };
+
+// Plugins registered through the C API. Rml::Shutdown clears the plugin registry, so registrations end there.
+Rml::Vector<PluginAdapter*>& RegisteredPlugins()
+{
+	static Rml::Vector<PluginAdapter*> plugins;
+	return plugins;
+}
 
 class CustomElement final : public Rml::Element {
 public:
@@ -246,16 +251,33 @@ private:
 	void* user_data;
 };
 
+template <typename Instancer>
+Rml::CApi::PropertyDictionaryView MakePropertyView(const Rml::PropertyDictionary& properties, const Instancer& instancer)
+{
+	return Rml::CApi::PropertyDictionaryView{&properties, &instancer.GetPropertySpecification()};
+}
+
+const RmlPropertyDictionary* ToC(const Rml::CApi::PropertyDictionaryView& view)
+{
+	return reinterpret_cast<const RmlPropertyDictionary*>(&view);
+}
+
 class DecoratorInstancerAdapter final : public Rml::DecoratorInstancer {
 public:
-	DecoratorInstancerAdapter(RmlDecoratorInstanceFunc instance, void* user_data) : instance(instance), user_data(user_data) {}
+	DecoratorInstancerAdapter(RmlDecoratorInstanceFunc instance, RmlDecoratorInstanceWithInterfaceFunc instance_with_interface, void* user_data) :
+		instance(instance), instance_with_interface(instance_with_interface), user_data(user_data)
+	{}
 
 	Rml::SharedPtr<Rml::Decorator> InstanceDecorator(const Rml::String& name, const Rml::PropertyDictionary& properties,
-		const Rml::DecoratorInstancerInterface&) override
+		const Rml::DecoratorInstancerInterface& instancer_interface) override
 	{
-		if (!instance)
-			return nullptr;
-		RmlDecorator* decorator = instance(user_data, Rml::CApi::ToStringView(name), reinterpret_cast<const RmlPropertyDictionary*>(&properties));
+		const Rml::CApi::PropertyDictionaryView view = MakePropertyView(properties, *this);
+		RmlDecorator* decorator = nullptr;
+		if (instance_with_interface)
+			decorator = instance_with_interface(user_data, Rml::CApi::ToStringView(name), ToC(view),
+				reinterpret_cast<const RmlDecoratorInstancerInterface*>(&instancer_interface));
+		else if (instance)
+			decorator = instance(user_data, Rml::CApi::ToStringView(name), ToC(view));
 		if (!decorator)
 			return nullptr;
 		return Rml::SharedPtr<Rml::Decorator>(reinterpret_cast<Rml::Decorator*>(decorator));
@@ -273,6 +295,7 @@ public:
 
 private:
 	RmlDecoratorInstanceFunc instance;
+	RmlDecoratorInstanceWithInterfaceFunc instance_with_interface;
 	void* user_data;
 };
 
@@ -319,10 +342,21 @@ public:
 	{
 		if (!instance)
 			return nullptr;
-		RmlFilter* filter = instance(user_data, Rml::CApi::ToStringView(name), reinterpret_cast<const RmlPropertyDictionary*>(&properties));
+		const Rml::CApi::PropertyDictionaryView view = MakePropertyView(properties, *this);
+		RmlFilter* filter = instance(user_data, Rml::CApi::ToStringView(name), ToC(view));
 		if (!filter)
 			return nullptr;
 		return Rml::SharedPtr<Rml::Filter>(reinterpret_cast<Rml::Filter*>(filter));
+	}
+
+	Rml::PropertyDefinition* Register(const Rml::String& name, const Rml::String& default_value)
+	{
+		return &RegisterProperty(name, default_value);
+	}
+
+	Rml::ShorthandId RegisterShorthandPublic(const Rml::String& shorthand_name, const Rml::String& property_names, Rml::ShorthandType type)
+	{
+		return RegisterShorthand(shorthand_name, property_names, type);
 	}
 
 private:
@@ -338,15 +372,96 @@ public:
 	{
 		if (!instance)
 			return nullptr;
-		RmlFontEffect* effect = instance(user_data, Rml::CApi::ToStringView(name), reinterpret_cast<const RmlPropertyDictionary*>(&properties));
+		const Rml::CApi::PropertyDictionaryView view = MakePropertyView(properties, *this);
+		RmlFontEffect* effect = instance(user_data, Rml::CApi::ToStringView(name), ToC(view));
 		if (!effect)
 			return nullptr;
 		return Rml::SharedPtr<Rml::FontEffect>(reinterpret_cast<Rml::FontEffect*>(effect));
 	}
 
+	Rml::PropertyDefinition* Register(const Rml::String& name, const Rml::String& default_value, bool affects_generation)
+	{
+		return &RegisterProperty(name, default_value, affects_generation);
+	}
+
+	Rml::ShorthandId RegisterShorthandPublic(const Rml::String& shorthand_name, const Rml::String& property_names, Rml::ShorthandType type)
+	{
+		return RegisterShorthand(shorthand_name, property_names, type);
+	}
+
 private:
 	RmlFontEffectInstanceFunc instance;
 	void* user_data;
+};
+
+Rml::FontGlyph FromC(const RmlFontGlyph& glyph)
+{
+	Rml::FontGlyph result;
+	result.bearing = Rml::CApi::FromC(glyph.bearing);
+	result.advance = glyph.advance;
+	result.bitmap_data = glyph.bitmap_data;
+	result.bitmap_dimensions = Rml::CApi::FromC(glyph.bitmap_dimensions);
+	result.color_format = glyph.color_format == RML_COLOR_FORMAT_RGBA8 ? Rml::ColorFormat::RGBA8 : Rml::ColorFormat::A8;
+	return result;
+}
+
+RmlFontGlyph ToC(const Rml::FontGlyph& glyph)
+{
+	RmlFontGlyph result = {};
+	result.bearing = Rml::CApi::ToC(glyph.bearing);
+	result.advance = glyph.advance;
+	result.bitmap_data = glyph.bitmap_data;
+	result.bitmap_dimensions = Rml::CApi::ToC(glyph.bitmap_dimensions);
+	result.color_format = glyph.color_format == Rml::ColorFormat::RGBA8 ? RML_COLOR_FORMAT_RGBA8 : RML_COLOR_FORMAT_A8;
+	return result;
+}
+
+class FontEffectAdapter final : public Rml::FontEffect {
+public:
+	FontEffectAdapter(const RmlFontEffectCallbacks& callbacks, void* user_data) : callbacks(callbacks), user_data(user_data) {}
+	~FontEffectAdapter() override
+	{
+		if (callbacks.on_destroy)
+			callbacks.on_destroy(user_data);
+	}
+
+	bool HasUniqueTexture() const override
+	{
+		if (!callbacks.has_unique_texture)
+			return FontEffect::HasUniqueTexture();
+		return callbacks.has_unique_texture(user_data);
+	}
+	bool GetGlyphMetrics(Rml::Vector2i& origin, Rml::Vector2i& dimensions, const Rml::FontGlyph& glyph) const override
+	{
+		if (!callbacks.get_glyph_metrics)
+			return FontEffect::GetGlyphMetrics(origin, dimensions, glyph);
+		RmlVector2i c_origin = Rml::CApi::ToC(origin);
+		RmlVector2i c_dimensions = Rml::CApi::ToC(dimensions);
+		const RmlFontGlyph c_glyph = ToC(glyph);
+		if (!callbacks.get_glyph_metrics(user_data, &c_origin, &c_dimensions, &c_glyph))
+			return false;
+		origin = Rml::CApi::FromC(c_origin);
+		dimensions = Rml::CApi::FromC(c_dimensions);
+		return true;
+	}
+	void GenerateGlyphTexture(Rml::byte* destination_data, Rml::Vector2i destination_dimensions, int destination_stride,
+		const Rml::FontGlyph& glyph) const override
+	{
+		if (!callbacks.generate_glyph_texture)
+			return FontEffect::GenerateGlyphTexture(destination_data, destination_dimensions, destination_stride, glyph);
+		const RmlFontGlyph c_glyph = ToC(glyph);
+		callbacks.generate_glyph_texture(user_data, destination_data, Rml::CApi::ToC(destination_dimensions), destination_stride, &c_glyph);
+	}
+
+private:
+	RmlFontEffectCallbacks callbacks;
+	void* user_data;
+};
+
+// What an RmlTexturedMeshList handle points to during generate_string.
+struct TexturedMeshListView {
+	Rml::TexturedMeshList* list;
+	Rml::RenderManager* render_manager;
 };
 
 class EventInstancerAdapter final : public Rml::EventInstancer {
@@ -501,8 +616,9 @@ public:
 			return FontEngineInterface::GenerateString(render_manager, face_handle, font_effects_handle, string, position, colour, opacity,
 				text_shaping_context, mesh_list);
 		const RmlTextShapingContext shaping = ToShapingContext(text_shaping_context);
+		TexturedMeshListView meshes{&mesh_list, &render_manager};
 		return callbacks.generate_string(user_data, face_handle, font_effects_handle, RmlStringView{string.begin(), string.size()},
-			Rml::CApi::ToC(position), Rml::CApi::ToC(colour), opacity, &shaping, reinterpret_cast<RmlTexturedMeshList*>(&mesh_list));
+			Rml::CApi::ToC(position), Rml::CApi::ToC(colour), opacity, &shaping, reinterpret_cast<RmlTexturedMeshList*>(&meshes));
 	}
 	int GetVersion(Rml::FontFaceHandle handle) override
 	{
@@ -541,7 +657,7 @@ void rml_plugin_destroy(RmlPlugin* plugin)
 	auto* adapter = reinterpret_cast<PluginAdapter*>(plugin);
 	if (adapter->IsRegistered())
 	{
-		adapter->SetRegistered(false);
+		Rml::CApi::NotePluginRegistered(plugin, false);
 		Rml::UnregisterPlugin(adapter);
 	}
 	delete adapter;
@@ -551,8 +667,21 @@ namespace Rml {
 namespace CApi {
 void NotePluginRegistered(RmlPlugin* plugin, bool registered)
 {
-	if (plugin)
-		reinterpret_cast<PluginAdapter*>(plugin)->SetRegistered(registered);
+	if (!plugin)
+		return;
+	auto* adapter = reinterpret_cast<PluginAdapter*>(plugin);
+	adapter->SetRegistered(registered);
+	Rml::Vector<PluginAdapter*>& plugins = RegisteredPlugins();
+	plugins.erase(std::remove(plugins.begin(), plugins.end(), adapter), plugins.end());
+	if (registered)
+		plugins.push_back(adapter);
+}
+
+void NotePluginsShutdown()
+{
+	for (PluginAdapter* adapter : RegisteredPlugins())
+		adapter->SetRegistered(false);
+	RegisteredPlugins().clear();
 }
 } // namespace CApi
 } // namespace Rml
@@ -594,6 +723,11 @@ RmlDecorator* rml_decorator_create(const RmlDecoratorCallbacks* callbacks, void*
 	return reinterpret_cast<RmlDecorator*>(new DecoratorAdapter(*callbacks, user_data));
 }
 
+void rml_decorator_destroy(RmlDecorator* decorator)
+{
+	delete reinterpret_cast<DecoratorAdapter*>(decorator);
+}
+
 RmlDecoratorInstancer* rml_decorator_instancer_create(RmlDecoratorInstanceFunc instance, void* user_data)
 {
 	if (!instance)
@@ -601,7 +735,39 @@ RmlDecoratorInstancer* rml_decorator_instancer_create(RmlDecoratorInstanceFunc i
 		Rml::Log::Message(Rml::Log::LT_ERROR, "Decorator instancer requires an instance callback.");
 		return nullptr;
 	}
-	return reinterpret_cast<RmlDecoratorInstancer*>(new DecoratorInstancerAdapter(instance, user_data));
+	return reinterpret_cast<RmlDecoratorInstancer*>(new DecoratorInstancerAdapter(instance, nullptr, user_data));
+}
+
+RmlDecoratorInstancer* rml_decorator_instancer_create_with_interface(RmlDecoratorInstanceWithInterfaceFunc instance, void* user_data)
+{
+	if (!instance)
+	{
+		Rml::Log::Message(Rml::Log::LT_ERROR, "Decorator instancer requires an instance callback.");
+		return nullptr;
+	}
+	return reinterpret_cast<RmlDecoratorInstancer*>(new DecoratorInstancerAdapter(nullptr, instance, user_data));
+}
+
+RmlTexture rml_decorator_instancer_interface_get_texture(const RmlDecoratorInstancerInterface* instancer_interface, RmlStringView filename)
+{
+	RMLUI_CAPI_REQUIRE(instancer_interface, {});
+	const auto& cpp_interface = *reinterpret_cast<const Rml::DecoratorInstancerInterface*>(instancer_interface);
+	return Rml::CApi::ToC(cpp_interface.GetTexture(Rml::CApi::ToString(filename)));
+}
+
+RmlTexture rml_decorator_instancer_interface_get_sprite(const RmlDecoratorInstancerInterface* instancer_interface, RmlStringView name,
+	RmlRectanglef* out_rectangle, float* out_display_scale)
+{
+	RMLUI_CAPI_REQUIRE(instancer_interface, {});
+	const auto& cpp_interface = *reinterpret_cast<const Rml::DecoratorInstancerInterface*>(instancer_interface);
+	const Rml::Sprite* sprite = cpp_interface.GetSprite(Rml::CApi::ToString(name));
+	if (!sprite || !sprite->sprite_sheet)
+		return {};
+	if (out_rectangle)
+		*out_rectangle = Rml::CApi::ToC(sprite->rectangle);
+	if (out_display_scale)
+		*out_display_scale = sprite->sprite_sheet->display_scale;
+	return Rml::CApi::ToC(sprite->sprite_sheet->texture_source.GetTexture(cpp_interface.GetRenderManager()));
 }
 
 void rml_decorator_instancer_destroy(RmlDecoratorInstancer* instancer)
@@ -616,6 +782,7 @@ void rml_register_decorator_instancer(RmlStringView name, RmlDecoratorInstancer*
 
 RmlPropertyDefinition* rml_decorator_instancer_register_property(RmlDecoratorInstancer* instancer, RmlStringView name, RmlStringView default_value)
 {
+	RMLUI_CAPI_REQUIRE(instancer, {});
 	auto* adapter = reinterpret_cast<DecoratorInstancerAdapter*>(instancer);
 	return reinterpret_cast<RmlPropertyDefinition*>(adapter->Register(Rml::CApi::ToString(name), Rml::CApi::ToString(default_value)));
 }
@@ -623,6 +790,7 @@ RmlPropertyDefinition* rml_decorator_instancer_register_property(RmlDecoratorIns
 uint8_t rml_decorator_instancer_register_shorthand(RmlDecoratorInstancer* instancer, RmlStringView shorthand_name, RmlStringView property_names,
 	RmlShorthandType type)
 {
+	RMLUI_CAPI_REQUIRE(instancer, {});
 	auto* adapter = reinterpret_cast<DecoratorInstancerAdapter*>(instancer);
 	return static_cast<uint8_t>(adapter->RegisterShorthandPublic(Rml::CApi::ToString(shorthand_name), Rml::CApi::ToString(property_names),
 		static_cast<Rml::ShorthandType>(type)));
@@ -632,6 +800,27 @@ RmlFilter* rml_filter_create(const RmlFilterCallbacks* callbacks, void* user_dat
 {
 	RmlFilterCallbacks empty = {};
 	return reinterpret_cast<RmlFilter*>(new FilterAdapter(callbacks ? *callbacks : empty, user_data));
+}
+
+void rml_filter_destroy(RmlFilter* filter)
+{
+	delete reinterpret_cast<FilterAdapter*>(filter);
+}
+
+RmlPropertyDefinition* rml_filter_instancer_register_property(RmlFilterInstancer* instancer, RmlStringView name, RmlStringView default_value)
+{
+	RMLUI_CAPI_REQUIRE(instancer, {});
+	auto* adapter = reinterpret_cast<FilterInstancerAdapter*>(instancer);
+	return reinterpret_cast<RmlPropertyDefinition*>(adapter->Register(Rml::CApi::ToString(name), Rml::CApi::ToString(default_value)));
+}
+
+uint8_t rml_filter_instancer_register_shorthand(RmlFilterInstancer* instancer, RmlStringView shorthand_name, RmlStringView property_names,
+	RmlShorthandType type)
+{
+	RMLUI_CAPI_REQUIRE(instancer, {});
+	auto* adapter = reinterpret_cast<FilterInstancerAdapter*>(instancer);
+	return static_cast<uint8_t>(adapter->RegisterShorthandPublic(Rml::CApi::ToString(shorthand_name), Rml::CApi::ToString(property_names),
+		static_cast<Rml::ShorthandType>(type)));
 }
 
 RmlFilterInstancer* rml_filter_instancer_create(RmlFilterInstanceFunc instance, void* user_data)
@@ -654,6 +843,99 @@ void rml_register_filter_instancer(RmlStringView name, RmlFilterInstancer* insta
 RmlFontEffect* rml_font_effect_create(void)
 {
 	return reinterpret_cast<RmlFontEffect*>(new Rml::FontEffect());
+}
+
+RmlFontEffect* rml_font_effect_create_custom(const RmlFontEffectCallbacks* callbacks, void* user_data)
+{
+	RmlFontEffectCallbacks empty = {};
+	return reinterpret_cast<RmlFontEffect*>(static_cast<Rml::FontEffect*>(new FontEffectAdapter(callbacks ? *callbacks : empty, user_data)));
+}
+
+void rml_font_effect_destroy(RmlFontEffect* effect)
+{
+	delete reinterpret_cast<Rml::FontEffect*>(effect);
+}
+
+void rml_font_effect_set_layer(RmlFontEffect* effect, RmlFontEffectLayer layer)
+{
+	RMLUI_CAPI_REQUIRE_VOID(effect);
+	reinterpret_cast<Rml::FontEffect*>(effect)->SetLayer(layer == RML_FONT_EFFECT_LAYER_FRONT ? Rml::FontEffect::Layer::Front
+																							   : Rml::FontEffect::Layer::Back);
+}
+
+RmlFontEffectLayer rml_font_effect_get_layer(const RmlFontEffect* effect)
+{
+	RMLUI_CAPI_REQUIRE(effect, RML_FONT_EFFECT_LAYER_BACK);
+	return reinterpret_cast<const Rml::FontEffect*>(effect)->GetLayer() == Rml::FontEffect::Layer::Front ? RML_FONT_EFFECT_LAYER_FRONT
+																										 : RML_FONT_EFFECT_LAYER_BACK;
+}
+
+void rml_font_effect_set_colour(RmlFontEffect* effect, RmlColourb colour)
+{
+	RMLUI_CAPI_REQUIRE_VOID(effect);
+	reinterpret_cast<Rml::FontEffect*>(effect)->SetColour(Rml::CApi::FromC(colour));
+}
+
+RmlColourb rml_font_effect_get_colour(const RmlFontEffect* effect)
+{
+	RMLUI_CAPI_REQUIRE(effect, {});
+	return Rml::CApi::ToC(reinterpret_cast<const Rml::FontEffect*>(effect)->GetColour());
+}
+
+void rml_font_effect_set_fingerprint(RmlFontEffect* effect, size_t fingerprint)
+{
+	RMLUI_CAPI_REQUIRE_VOID(effect);
+	reinterpret_cast<Rml::FontEffect*>(effect)->SetFingerprint(fingerprint);
+}
+
+size_t rml_font_effect_get_fingerprint(const RmlFontEffect* effect)
+{
+	RMLUI_CAPI_REQUIRE(effect, {});
+	return reinterpret_cast<const Rml::FontEffect*>(effect)->GetFingerprint();
+}
+
+bool rml_font_effect_has_unique_texture(const RmlFontEffect* effect)
+{
+	RMLUI_CAPI_REQUIRE(effect, {});
+	return reinterpret_cast<const Rml::FontEffect*>(effect)->HasUniqueTexture();
+}
+
+bool rml_font_effect_get_glyph_metrics(const RmlFontEffect* effect, RmlVector2i* origin, RmlVector2i* dimensions, const RmlFontGlyph* glyph)
+{
+	RMLUI_CAPI_REQUIRE(effect && origin && dimensions && glyph, {});
+	Rml::Vector2i cpp_origin = Rml::CApi::FromC(*origin);
+	Rml::Vector2i cpp_dimensions = Rml::CApi::FromC(*dimensions);
+	if (!reinterpret_cast<const Rml::FontEffect*>(effect)->GetGlyphMetrics(cpp_origin, cpp_dimensions, FromC(*glyph)))
+		return false;
+	*origin = Rml::CApi::ToC(cpp_origin);
+	*dimensions = Rml::CApi::ToC(cpp_dimensions);
+	return true;
+}
+
+void rml_font_effect_generate_glyph_texture(const RmlFontEffect* effect, unsigned char* destination, RmlVector2i destination_dimensions,
+	int destination_stride, const RmlFontGlyph* glyph)
+{
+	RMLUI_CAPI_REQUIRE_VOID(effect && destination && glyph);
+	reinterpret_cast<const Rml::FontEffect*>(effect)->GenerateGlyphTexture(destination, Rml::CApi::FromC(destination_dimensions), destination_stride,
+		FromC(*glyph));
+}
+
+RmlPropertyDefinition* rml_font_effect_instancer_register_property(RmlFontEffectInstancer* instancer, RmlStringView name,
+	RmlStringView default_value, bool affects_generation)
+{
+	RMLUI_CAPI_REQUIRE(instancer, {});
+	auto* adapter = reinterpret_cast<FontEffectInstancerAdapter*>(instancer);
+	return reinterpret_cast<RmlPropertyDefinition*>(
+		adapter->Register(Rml::CApi::ToString(name), Rml::CApi::ToString(default_value), affects_generation));
+}
+
+uint8_t rml_font_effect_instancer_register_shorthand(RmlFontEffectInstancer* instancer, RmlStringView shorthand_name, RmlStringView property_names,
+	RmlShorthandType type)
+{
+	RMLUI_CAPI_REQUIRE(instancer, {});
+	auto* adapter = reinterpret_cast<FontEffectInstancerAdapter*>(instancer);
+	return static_cast<uint8_t>(adapter->RegisterShorthandPublic(Rml::CApi::ToString(shorthand_name), Rml::CApi::ToString(property_names),
+		static_cast<Rml::ShorthandType>(type)));
 }
 
 RmlFontEffectInstancer* rml_font_effect_instancer_create(RmlFontEffectInstanceFunc instance, void* user_data)
@@ -721,16 +1003,18 @@ void rml_font_engine_interface_destroy(RmlFontEngineInterface* iface)
 void rml_textured_mesh_list_push(RmlTexturedMeshList* list, const RmlVertex* vertices, size_t num_vertices, const int* indices,
 	size_t num_indices)
 {
-	if (!list)
-		return;
+	rml_textured_mesh_list_push_textured(list, vertices, num_vertices, indices, num_indices, nullptr);
+}
+
+void rml_textured_mesh_list_push_textured(RmlTexturedMeshList* list, const RmlVertex* vertices, size_t num_vertices, const int* indices,
+	size_t num_indices, const RmlTextureSource* texture)
+{
+	RMLUI_CAPI_REQUIRE_VOID(list);
+	const TexturedMeshListView& view = *reinterpret_cast<const TexturedMeshListView*>(list);
 
 	Rml::TexturedMesh textured;
-	if (vertices && num_vertices > 0)
-	{
-		const auto* source = reinterpret_cast<const Rml::Vertex*>(vertices);
-		textured.mesh.vertices.assign(source, source + num_vertices);
-	}
-	if (indices && num_indices > 0)
-		textured.mesh.indices.assign(indices, indices + num_indices);
-	reinterpret_cast<Rml::TexturedMeshList*>(list)->push_back(std::move(textured));
+	textured.mesh = Rml::CApi::MakeMesh(vertices, num_vertices, indices, num_indices);
+	if (texture)
+		textured.texture = Rml::CApi::GetTexture(texture, *view.render_manager);
+	view.list->push_back(std::move(textured));
 }
